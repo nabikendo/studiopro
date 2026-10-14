@@ -145,15 +145,16 @@
 
   <div id="view-popup"
        onpointerdown="cancelAutoDismiss()"
+       ondblclick="handleDoubleTapGesture()"
        onclick="event.stopPropagation()"
        class="popup-card w-full max-w-md mx-3 mb-3 backdrop-blur-2xl rounded-[38px] p-5 shadow-2xl relative animate-slide-up overflow-hidden">
 
     <div class="flex items-center justify-between mb-1">
       <div class="flex items-center gap-1.5">
-        <button onclick="cycleUiMode()" id="btn-ui-mode" title="Alternar Tema (Claro / Escuro / Sistema)" class="w-8 h-8 rounded-full sea-glass-surface flex items-center justify-center text-xs active:scale-90 transition">
+        <button onclick="cycleUiMode()" id="btn-ui-mode" title="Tema: Claro / Escuro / Sistema" class="w-8 h-8 rounded-full sea-glass-surface flex items-center justify-center text-xs active:scale-90 transition">
           ☀️
         </button>
-        <button onclick="cycleGlassTheme()" title="Cor do Vidro (Sea / Beach / Frost)" class="w-8 h-8 rounded-full sea-glass-surface flex items-center justify-center font-bold text-xs active:scale-90 transition">
+        <button onclick="cycleGlassTheme()" title="Cor do Vidro" class="w-8 h-8 rounded-full sea-glass-surface flex items-center justify-center font-bold text-xs active:scale-90 transition">
           G
         </button>
         <button onclick="quickSwitchAudio()" id="btn-quick-switch" class="px-2.5 h-8 rounded-full sea-glass-surface flex items-center gap-1 text-[11px] font-semibold active:scale-95 transition">
@@ -171,6 +172,9 @@
       <h2 id="device-title" class="text-center text-[21px] font-bold tracking-tight">
         UGREEN Studio Pro
       </h2>
+      <span id="rssi-signal-badge" class="hidden mt-0.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 flex items-center gap-1">
+        <span>📶</span> <span id="rssi-text">Próximo (~0.8m)</span>
+      </span>
       <span id="low-latency-badge" class="hidden mt-0.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/25 text-amber-500 border border-amber-400/40">
         ⚡ Low Latency Game Mode
       </span>
@@ -192,10 +196,10 @@
         <div class="relative w-5 h-5 flex items-center justify-center">
           <svg class="w-5 h-5 -rotate-90" viewBox="0 0 44 44">
             <circle cx="22" cy="22" r="18" stroke="rgba(150,150,150,0.25)" stroke-width="5" fill="none"></circle>
-            <circle id="battery-ring" cx="22" cy="22" r="18" stroke="#34C759" stroke-width="5" stroke-dasharray="113.1" stroke-dashoffset="0" stroke-linecap="round" fill="none"></circle>
+            <circle id="battery-ring" cx="22" cy="22" r="18" stroke="#34C759" stroke-width="5" stroke-dasharray="113.1" stroke-dashoffset="113.1" stroke-linecap="round" fill="none" class="transition-all duration-1000 ease-out"></circle>
           </svg>
         </div>
-        <span id="popup-battery-text" class="text-[12px] font-bold">100%</span>
+        <span id="popup-battery-text" class="text-[12px] font-bold">0%</span>
         <span id="popup-battery-hours" class="text-[10px] opacity-75 font-medium">• ~80h</span>
       </button>
     </div>
@@ -252,6 +256,8 @@
     let isSearching = false;
     let currentBattery = 100;
     let autoDismissTimer = null;
+    let currentAncModeIndex = 2;
+    const ancModesSeq = ['off', 'transparency', 'anc'];
 
     const UI_MODES = [
       { id: 'light', icon: '☀️', label: 'Modo Claro' },
@@ -323,7 +329,7 @@
       if (window.AndroidBridge && window.AndroidBridge.requestBatteryUpdate) {
         const level = window.AndroidBridge.requestBatteryUpdate();
         if (level >= 0 && level <= 100) {
-          updateBattery(level);
+          updateBattery(level, true);
           showToast('Bateria atualizada: ' + level + '%');
           return;
         }
@@ -331,24 +337,27 @@
       showToast('Bateria do dispositivo: ' + currentBattery + '%');
     }
 
-    function updateBattery(val) {
+    function updateBattery(val, instant = false) {
       currentBattery = val;
       document.getElementById('popup-battery-text').innerText = val + '%';
-      const offset = 113.1 - (val / 100) * 113.1;
+      const targetOffset = 113.1 - (val / 100) * 113.1;
       const ring = document.getElementById('battery-ring');
       if (ring) {
-        ring.style.strokeDashoffset = offset;
+        if (instant) {
+          ring.style.transition = 'none';
+          ring.style.strokeDashoffset = targetOffset;
+        } else {
+          ring.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1)';
+          setTimeout(() => { ring.style.strokeDashoffset = targetOffset; }, 100);
+        }
         ring.setAttribute('stroke', val <= 20 ? '#FF3B30' : '#34C759');
       }
       document.getElementById('popup-battery-hours').innerText = '• ~' + Math.max(1, Math.round((val / 100) * 80)) + 'h';
     }
 
-    // Auto-fechar silencioso ajustado para 5 segundos
     function startAutoDismissTimer() {
       cancelAutoDismiss();
-      autoDismissTimer = setTimeout(() => {
-        closePopup();
-      }, 5000);
+      autoDismissTimer = setTimeout(() => { closePopup(); }, 5000);
     }
 
     function cancelAutoDismiss() {
@@ -357,6 +366,24 @@
         autoDismissTimer = null;
       }
     }
+
+    function handleDoubleTapGesture() {
+      vibrateTick();
+      currentAncModeIndex = (currentAncModeIndex + 1) % ancModesSeq.length;
+      const nextMode = ancModesSeq[currentAncModeIndex];
+      setListeningMode(nextMode);
+      showToast('Modo: ' + nextMode.toUpperCase());
+    }
+
+    window.updateRssiSignal = function(rssi) {
+      const badge = document.getElementById('rssi-signal-badge');
+      const text = document.getElementById('rssi-text');
+      badge.classList.remove('hidden');
+      badge.classList.add('flex');
+      if (rssi > -60) text.innerText = 'Próximo (~0.5m)';
+      else if (rssi > -80) text.innerText = 'Bom (~1.2m)';
+      else text.innerText = 'Distante (~2.5m)';
+    };
 
     function updateLightShift(nx, ny) {
       const lx = Math.max(-12, Math.min(12, nx * 16));
@@ -437,6 +464,7 @@
 
     function setListeningMode(mode) {
       vibrateTick();
+      currentAncModeIndex = ancModesSeq.indexOf(mode);
       ['off', 'transparency', 'anc'].forEach((m) => {
         const el = document.getElementById('mode-' + m);
         el.className = m === mode
@@ -485,16 +513,18 @@
       isConnected = true;
 
       if (deviceName) document.getElementById('device-title').innerText = deviceName;
-      if (batteryLevel >= 0 && batteryLevel <= 100) updateBattery(batteryLevel);
+
+      document.getElementById('popup-battery-badge').classList.remove('hidden');
+      document.getElementById('popup-battery-badge').classList.add('flex');
+      updateBattery(0, true);
+      setTimeout(() => {
+        updateBattery(batteryLevel >= 0 && batteryLevel <= 100 ? batteryLevel : 100, false);
+      }, 150);
 
       document.getElementById('search-radar').classList.add('hidden');
       document.getElementById('search-radar').classList.remove('flex');
       document.getElementById('btn-spinner').classList.add('hidden');
       document.getElementById('popup-desc').classList.add('hidden');
-
-      // Exibe a bateria agora que está conectado
-      document.getElementById('popup-battery-badge').classList.remove('hidden');
-      document.getElementById('popup-battery-badge').classList.add('flex');
 
       document.getElementById('chameleon-headphone-panel').classList.remove('hidden');
       document.getElementById('btn-text').innerText = 'Concluído';
@@ -507,12 +537,14 @@
       if (window.AndroidBridge) window.AndroidBridge.closeOverlay();
     }
 
-    window.updateFromAndroid = function(deviceName, batteryLevel, connected) {
-      if (batteryLevel >= 0 && batteryLevel <= 100) updateBattery(batteryLevel);
+    window.updateFromAndroid = function(deviceName, batteryLevel, connected, rssi) {
       if (connected) {
         window.onDeviceConnected(deviceName, batteryLevel);
       } else if (deviceName) {
         document.getElementById('device-title').innerText = deviceName;
+      }
+      if (typeof rssi === 'number') {
+        window.updateRssiSignal(rssi);
       }
     };
 
