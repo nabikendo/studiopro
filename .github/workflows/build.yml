@@ -1,0 +1,365 @@
+name: Gerar APK Studio Pro S24 FE
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar arquivos do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Montar estrutura nativa Android (S24 FE)
+        run: |
+          mkdir -p app/src/main/java/com/anderson/studiopro
+          mkdir -p app/src/main/assets
+          mkdir -p app/src/main/res/values
+
+          # Copia o seu studiopro.html para dentro do app Android
+          cp studiopro.html app/src/main/assets/index.html
+
+          # Injeta a ponte nativa Android (Bateria real Bluetooth + Fechar janela) no HTML
+          cat << 'EOF' >> app/src/main/assets/index.html
+          <script>
+            // Fecha a janela transparente do Android ao clicar no X ou fora do cartão
+            const origClose = window.closePopup;
+            window.closePopup = function() {
+              if (origClose) origClose();
+              if (window.AndroidBridge) window.AndroidBridge.closeOverlay();
+            };
+
+            // Recebe o nome do fone e a bateria real enviados pelo Bluetooth do S24 FE
+            window.updateFromAndroid = function(deviceName, batteryLevel, connected) {
+              if (deviceName) {
+                document.querySelectorAll('h1, h2').forEach(el => el.innerText = deviceName);
+              }
+              if (batteryLevel >= 0 && batteryLevel <= 100) {
+                updateBattery(batteryLevel);
+              }
+              if (connected && !isConnected) {
+                handleMainAction();
+              }
+            };
+          </script>
+          EOF
+
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "StudioProS24"
+          include(":app")
+          EOF
+
+          cat << 'EOF' > build.gradle
+          plugins {
+              id("com.android.application") version "8.3.0" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.22" apply false
+          }
+          EOF
+
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          EOF
+
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.anderson.studiopro"
+              compileSdk = 34
+
+              defaultConfig {
+                  applicationId = "com.anderson.studiopro"
+                  minSdk = 29
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/styles.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.OverlayPopup" parent="@android:style/Theme.Translucent.NoTitleBar">
+                  <item name="android:windowIsTranslucent">true</item>
+                  <item name="android:windowBackground">@android:color/transparent</item>
+                  <item name="android:backgroundDimEnabled">true</item>
+                  <item name="android:backgroundDimAmount">0.45</item>
+              </style>
+          </resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.BLUETOOTH" />
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+              <application
+                  android:label="Studio Pro Popup"
+                  android:usesCleartextTraffic="true">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:theme="@style/Theme.OverlayPopup"
+                      android:launchMode="singleInstance"
+                      android:excludeFromRecents="true"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <receiver
+                      android:name=".StudioProReceiver"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                          <action android:name="android.bluetooth.device.action.BATTERY_LEVEL_CHANGED" />
+                      </intent-filter>
+                  </receiver>
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/anderson/studiopro/MainActivity.kt
+          package com.anderson.studiopro
+
+          import android.Manifest
+          import android.annotation.SuppressLint
+          import android.app.Activity
+          import android.bluetooth.BluetoothAdapter
+          import android.bluetooth.BluetoothDevice
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.pm.PackageManager
+          import android.graphics.Color
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.provider.Settings
+          import android.webkit.JavascriptInterface
+          import android.webkit.ValueCallback
+          import android.webkit.WebChromeClient
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.widget.Toast
+
+          class MainActivity : Activity() {
+              private lateinit var webView: WebView
+              private var filePathCallback: ValueCallback<Array<Uri>>? = null
+
+              private val btReceiver = object : BroadcastReceiver() {
+                  override fun onReceive(context: Context?, intent: Intent?) {
+                      when (intent?.action) {
+                          "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED" -> {
+                              val level = intent.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL", -1)
+                              if (level in 0..100) pushToWeb(null, level, true)
+                          }
+                          BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                              finish()
+                          }
+                      }
+                  }
+              }
+
+              @SuppressLint("SetJavaScriptEnabled")
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  requestNeededPermissions()
+
+                  webView = WebView(this).apply {
+                      setBackgroundColor(Color.TRANSPARENT)
+                      settings.javaScriptEnabled = true
+                      settings.domStorageEnabled = true
+                      settings.allowFileAccess = true
+                      addJavascriptInterface(AndroidBridge(), "AndroidBridge")
+
+                      webViewClient = object : WebViewClient() {
+                          override fun onPageFinished(view: WebView?, url: String?) {
+                              syncBluetoothState()
+                          }
+                      }
+
+                      webChromeClient = object : WebChromeClient() {
+                          override fun onShowFileChooser(
+                              webView: WebView?,
+                              callback: ValueCallback<Array<Uri>>?,
+                              params: FileChooserParams?
+                          ): Boolean {
+                              filePathCallback?.onReceiveValue(null)
+                              filePathCallback = callback
+                              val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                                  addCategory(Intent.CATEGORY_OPENABLE)
+                                  type = "image/*"
+                              }
+                              startActivityForResult(Intent.createChooser(intent, "Escolher Foto do Fone"), 1001)
+                              return true
+                          }
+                      }
+                      loadUrl("file:///android_asset/index.html")
+                  }
+
+                  setContentView(webView)
+
+                  val filter = IntentFilter().apply {
+                      addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED")
+                      addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+                  }
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                      registerReceiver(btReceiver, filter, Context.RECEIVER_EXPORTED)
+                  } else {
+                      registerReceiver(btReceiver, filter)
+                  }
+              }
+
+              private fun requestNeededPermissions() {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                      if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                          requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 100)
+                      }
+                  }
+                  if (!Settings.canDrawOverlays(this)) {
+                      Toast.makeText(this, "Ative a permissão 'Aparecer sobre outros apps' para o Pop-up automático", Toast.LENGTH_LONG).show()
+                      val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                      startActivity(intent)
+                  }
+              }
+
+              @SuppressLint("MissingPermission")
+              private fun syncBluetoothState() {
+                  try {
+                      val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+                      for (device in adapter.bondedDevices) {
+                          val name = device.name ?: continue
+                          if (name.contains("Studio Pro", true) || name.contains("UGREEN", true) || name.contains("QCY", true)) {
+                              val isConn = try {
+                                  device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
+                              } catch (e: Exception) { false }
+
+                              val battery = try {
+                                  device.javaClass.getMethod("getBatteryLevel").invoke(device) as? Int ?: 100
+                              } catch (e: Exception) { 100 }
+
+                              if (isConn) {
+                                  pushToWeb(name, if (battery in 0..100) battery else 100, true)
+                                  return
+                              }
+                          }
+                      }
+                  } catch (e: Exception) {}
+              }
+
+              private fun pushToWeb(name: String?, battery: Int, connected: Boolean) {
+                  val safeName = name?.let { "'$it'" } ?: "null"
+                  webView.post {
+                      webView.evaluateJavascript("if(window.updateFromAndroid) window.updateFromAndroid($safeName, $battery, $connected);", null)
+                  }
+              }
+
+              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+                  super.onActivityResult(requestCode, resultCode, data)
+                  if (requestCode == 1001) {
+                      val result = if (resultCode == RESULT_OK && data?.data != null) arrayOf(data.data!!) else null
+                      filePathCallback?.onReceiveValue(result)
+                      filePathCallback = null
+                  }
+              }
+
+              override fun onDestroy() {
+                  super.onDestroy()
+                  try { unregisterReceiver(btReceiver) } catch (e: Exception) {}
+              }
+
+              inner class AndroidBridge {
+                  @JavascriptInterface
+                  fun closeOverlay() {
+                      runOnUiThread { finish() }
+                  }
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/anderson/studiopro/StudioProReceiver.kt
+          package com.anderson.studiopro
+
+          import android.annotation.SuppressLint
+          import android.bluetooth.BluetoothDevice
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+
+          class StudioProReceiver : BroadcastReceiver() {
+              @SuppressLint("MissingPermission")
+              override fun onReceive(context: Context, intent: Intent) {
+                  if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
+                  val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                  val name = device?.name ?: return
+
+                  if (name.contains("Studio Pro", ignoreCase = true) ||
+                      name.contains("UGREEN", ignoreCase = true) ||
+                      name.contains("QCY", ignoreCase = true)) {
+                      val popupIntent = Intent(context, MainActivity::class.java).apply {
+                          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                      }
+                      context.startActivity(popupIntent)
+                  }
+              }
+          }
+          EOF
+
+      - name: Compilar o APK
+        run: gradle assembleDebug
+
+      - name: Disponibilizar APK para Download
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudioPro-S24FE-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
