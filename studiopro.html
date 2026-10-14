@@ -6,10 +6,84 @@
   <title>UGREEN Studio Pro</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    :root {
+      --light-x: 0px;
+      --light-y: 8px;
+      --rim-x: -1px;
+      --rim-y: -1px;
+      /* Cores base do cartão (Modo Claro padrão) */
+      --card-bg: rgba(255, 255, 255, 0.96);
+      --card-border: rgba(255, 255, 255, 1);
+      --text-main: #171717;
+      --text-sub: #737373;
+      /* Sea Glass padrão */
+      --glass-grad-1: rgba(236, 194, 255, 0.62);
+      --glass-grad-2: rgba(196, 218, 255, 0.62);
+      --glass-shadow: rgba(168, 125, 245, 0.34);
+      --btn-grad-1: #c7d8ff;
+      --btn-grad-2: #e8b8ff;
+      --ink-color: #261752;
+    }
+
+    /* MODO ESCURO (Dark Mode) */
+    body[data-ui-mode="dark"] {
+      --card-bg: rgba(24, 24, 28, 0.96);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --text-main: #f5f5f7;
+      --text-sub: #a1a1aa;
+      --glass-grad-1: rgba(88, 62, 135, 0.55);
+      --glass-grad-2: rgba(45, 72, 125, 0.55);
+      --glass-shadow: rgba(0, 0, 0, 0.55);
+      --btn-grad-1: #4f46e5;
+      --btn-grad-2: #7c3aed;
+      --ink-color: #ffffff;
+    }
+
+    /* MODO SEA GLASS COMPLETO (Cartão inteiro em vidro fosco) */
+    body[data-ui-mode="seaglass"] {
+      --card-bg: linear-gradient(145deg, rgba(242, 215, 255, 0.88) 0%, rgba(210, 230, 255, 0.88) 100%);
+      --card-border: rgba(255, 255, 255, 0.95);
+      --text-main: #261752;
+      --text-sub: #5b4b8a;
+    }
+
+    /* Variantes de Vidro do botão G */
+    body[data-glass="beach"] {
+      --glass-grad-1: rgba(176, 245, 212, 0.68);
+      --glass-grad-2: rgba(162, 232, 245, 0.68);
+      --glass-shadow: rgba(72, 185, 150, 0.34);
+      --btn-grad-1: #a7f3d0;
+      --btn-grad-2: #99f6e4;
+      --ink-color: #0b3b2e;
+    }
+    body[data-glass="jewel"] {
+      --glass-grad-1: rgba(182, 148, 255, 0.72);
+      --glass-grad-2: rgba(132, 178, 255, 0.72);
+      --glass-shadow: rgba(115, 82, 235, 0.42);
+      --btn-grad-1: #a5b4fc;
+      --btn-grad-2: #c084fc;
+      --ink-color: #1e124a;
+    }
+    body[data-glass="frost"] {
+      --glass-grad-1: rgba(242, 246, 252, 0.78);
+      --glass-grad-2: rgba(225, 234, 245, 0.78);
+      --glass-shadow: rgba(120, 138, 165, 0.28);
+      --btn-grad-1: #e2e8f0;
+      --btn-grad-2: #f1f5f9;
+      --ink-color: #1e293b;
+    }
+
     html, body {
       background: transparent !important;
       margin: 0;
       padding: 0;
+    }
+
+    .popup-card {
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      color: var(--text-main);
+      transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
     }
 
     @keyframes slideUp {
@@ -22,82 +96,119 @@
 
     @keyframes floatOnly {
       0%, 100% { transform: translateY(0px); }
-      50%      { transform: translateY(-8px); }
+      50%      { transform: translateY(-7px); }
     }
     @keyframes shadowPulse {
-      0%, 100% { transform: scale(1); opacity: 0.26; }
+      0%, 100% { transform: scale(1); opacity: 0.25; }
       50%      { transform: scale(0.84); opacity: 0.14; }
     }
 
     .headphone-float {
       animation: floatOnly 3.6s ease-in-out infinite;
-      filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.16));
+      filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.22));
     }
 
     .floor-shadow {
-      width: 115px;
-      height: 14px;
+      width: 112px;
+      height: 13px;
       background: radial-gradient(ellipse at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 72%);
       border-radius: 50%;
       animation: shadowPulse 3.6s ease-in-out infinite;
     }
 
-    /* Anel de radar ao procurar o fone para parear */
     @keyframes radarPing {
       0% { transform: scale(0.85); opacity: 0.75; }
       100% { transform: scale(1.65); opacity: 0; }
     }
     .radar-ring {
       position: absolute;
-      width: 130px;
-      height: 130px;
+      width: 125px;
+      height: 125px;
       border-radius: 9999px;
-      border: 2.5px solid rgba(168, 130, 255, 0.65);
+      border: 2.5px solid var(--glass-shadow);
       animation: radarPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
       pointer-events: none;
     }
 
-    /* Estilo Sea Glass (Vidro Fosco Granulado com Borda Brilhante) */
-    .sea-glass-bar {
-      background: linear-gradient(135deg, rgba(236, 194, 255, 0.58) 0%, rgba(196, 215, 255, 0.58) 100%);
+    .sea-glass-surface {
+      background: linear-gradient(135deg, var(--glass-grad-1) 0%, var(--glass-grad-2) 100%);
       backdrop-filter: blur(16px);
-      border: 1.5px solid rgba(255, 255, 255, 0.9);
-      box-shadow: 0 10px 24px -6px rgba(168, 130, 255, 0.28), inset 0 1px 2px rgba(255, 255, 255, 0.95);
+      border: 1.5px solid rgba(255, 255, 255, 0.65);
+      box-shadow:
+        var(--light-x) var(--light-y) 22px -4px var(--glass-shadow),
+        inset var(--rim-x) var(--rim-y) 3px rgba(255, 255, 255, 0.85);
+      color: var(--ink-color);
+      transition: background 0.3s ease, box-shadow 0.08s ease-out;
     }
 
     .sea-glass-pill-active {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 246, 255, 0.85) 100%);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(245, 248, 255, 0.9) 100%);
       border: 1.5px solid rgba(255, 255, 255, 1);
-      box-shadow: 0 6px 14px rgba(110, 130, 230, 0.22), inset 0 1px 1px rgba(255, 255, 255, 1);
-      color: #2b1954;
+      box-shadow:
+        var(--light-x) calc(var(--light-y) * 0.6) 14px var(--glass-shadow),
+        inset 0 1px 2px rgba(255, 255, 255, 1);
+      color: #1e124a !important;
     }
 
     .sea-glass-btn-main {
-      background: linear-gradient(135deg, #c7d8ff 0%, #e5b8ff 100%);
-      border: 1.5px solid rgba(255, 255, 255, 0.95);
-      box-shadow: 0 10px 22px -4px rgba(145, 158, 255, 0.45), inset 0 1.5px 2px rgba(255, 255, 255, 0.95);
-      color: #1e295b;
+      background: linear-gradient(135deg, var(--btn-grad-1) 0%, var(--btn-grad-2) 100%);
+      border: 1.5px solid rgba(255, 255, 255, 0.85);
+      box-shadow:
+        var(--light-x) var(--light-y) 22px -3px var(--glass-shadow),
+        inset var(--rim-x) var(--rim-y) 3px rgba(255, 255, 255, 0.9);
+      color: var(--ink-color);
+      transition: all 0.25s ease;
     }
   </style>
 </head>
-<body id="backdrop" onclick="handleBackdropClick(event)" class="min-h-screen w-full flex flex-col justify-end items-center select-none font-sans overflow-hidden">
+<body id="backdrop" data-ui-mode="light" data-glass="sea" onclick="handleBackdropClick(event)" class="min-h-screen w-full flex flex-col justify-end items-center select-none font-sans overflow-hidden">
 
   <!-- SOMENTE O CARTÃO POP-UP NA PARTE INFERIOR -->
-  <div id="view-popup" onclick="event.stopPropagation()" class="w-full max-w-md mx-3 mb-3 bg-white/95 backdrop-blur-xl rounded-[38px] p-6 shadow-2xl border border-white relative animate-slide-up transition-all duration-300">
+  <div id="view-popup"
+       onpointerdown="cancelAutoDismiss()"
+       onclick="event.stopPropagation()"
+       class="popup-card w-full max-w-md mx-3 mb-3 backdrop-blur-2xl rounded-[38px] p-5 shadow-2xl relative animate-slide-up overflow-hidden">
 
-    <!-- Botão Fechar (X) -->
-    <button onclick="closePopup()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-500 font-bold">
-      ✕
-    </button>
+    <!-- Barra discreta do Auto-Dismiss de 6 segundos (Ideia 9) -->
+    <div id="auto-dismiss-bar" class="absolute top-0 left-0 h-1 bg-purple-400/50 transition-all duration-1000" style="width: 100%"></div>
 
-    <!-- Título do Auscultador -->
-    <h2 id="device-title" class="text-center text-[22px] font-bold tracking-tight text-neutral-900 mt-1">
-      UGREEN Studio Pro
-    </h2>
+    <!-- Topo: Modo Claro/Escuro/SeaGlass + Cor do Vidro (G) + Bateria + Quick Switch + Fechar -->
+    <div class="flex items-center justify-between mb-1">
+      <div class="flex items-center gap-1.5">
+        <!-- Alternador de Tema: Claro (☀️) -> Escuro (🌙) -> Sea Glass (✨) -->
+        <button onclick="cycleUiMode()" id="btn-ui-mode" title="Alternar Tema: Claro / Escuro / Sea Glass" class="w-8 h-8 rounded-full sea-glass-surface flex items-center justify-center text-xs active:scale-90 transition">
+          ☀️
+        </button>
 
-    <!-- Área Central Fixa (Sem clique de upload de foto) -->
-    <div class="relative h-52 flex flex-col items-center justify-center my-1">
-      <!-- Ondas de radar (só aparecem enquanto procura o fone para parear) -->
+        <!-- Bolinha 'G' para alternar o material do vidro (Sea / Beach / Jewel / Frost) -->
+        <button onclick="cycleGlassTheme()" title="Trocar cor do vidro" class="w-8 h-8 rounded-full sea-glass-surface flex items-center justify-center font-bold text-xs active:scale-90 transition">
+          G
+        </button>
+
+        <!-- Botão Quick Switch para trocar entre Fone e Caixa de Som (Ideia 6) -->
+        <button onclick="quickSwitchAudio()" id="btn-quick-switch" class="px-2.5 h-8 rounded-full sea-glass-surface flex items-center gap-1 text-[11px] font-semibold active:scale-95 transition">
+          <span>🔄</span>
+          <span id="quick-switch-label">Áudio</span>
+        </button>
+      </div>
+
+      <button onclick="closePopup()" class="w-8 h-8 rounded-full bg-neutral-500/15 hover:bg-neutral-500/25 flex items-center justify-center font-bold active:scale-90 transition">
+        ✕
+      </button>
+    </div>
+
+    <!-- Título do Dispositivo + Selo Low Latency (Ideia 10) -->
+    <div class="flex flex-col items-center">
+      <h2 id="device-title" class="text-center text-[21px] font-bold tracking-tight">
+        UGREEN Studio Pro
+      </h2>
+      <span id="low-latency-badge" class="hidden mt-0.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/25 text-amber-500 border border-amber-400/40">
+        ⚡ Low Latency Game Mode
+      </span>
+    </div>
+
+    <!-- Área Central Fixa: Fone a Flutuar + Painel de Bateria Sempre Visível -->
+    <div class="relative h-44 flex flex-col items-center justify-center my-0.5">
       <div id="search-radar" class="hidden items-center justify-center">
         <div class="radar-ring"></div>
         <div class="radar-ring" style="animation-delay: 0.6s"></div>
@@ -106,56 +217,309 @@
       <div id="card-float-wrapper" class="flex flex-col items-center justify-center z-10">
         <img id="img-popup"
              src="ugreen_cutout.png"
-             class="headphone-float h-36 w-auto object-contain select-none pointer-events-none"
+             class="headphone-float h-28 w-auto object-contain select-none pointer-events-none"
              alt="UGREEN Studio Pro" />
-        <div class="floor-shadow mt-2"></div>
+        <div class="floor-shadow mt-1.5"></div>
       </div>
 
-      <!-- Anel Circular Verde de Bateria -->
-      <div id="popup-battery-badge" class="hidden items-center gap-2 mt-2 z-10">
-        <div class="relative w-7 h-7 flex items-center justify-center">
-          <svg class="w-7 h-7 -rotate-90" viewBox="0 0 44 44">
-            <circle cx="22" cy="22" r="18" stroke="#E5E5EA" stroke-width="4.5" fill="none"></circle>
-            <circle id="battery-ring" cx="22" cy="22" r="18" stroke="#34C759" stroke-width="4.5" stroke-dasharray="113.1" stroke-dashoffset="0" stroke-linecap="round" fill="none"></circle>
+      <!-- Painel Interativo de Bateria (Toque para atualizar e ver autonomia estimada) -->
+      <button onclick="refreshDeviceBattery()"
+              id="popup-battery-badge"
+              title="Toque para atualizar a bateria do dispositivo"
+              class="flex items-center gap-2 mt-2 px-3 py-1 rounded-full sea-glass-surface z-10 active:scale-95 transition">
+        <div class="relative w-5 h-5 flex items-center justify-center">
+          <svg class="w-5 h-5 -rotate-90" viewBox="0 0 44 44">
+            <circle cx="22" cy="22" r="18" stroke="rgba(150,150,150,0.25)" stroke-width="5" fill="none"></circle>
+            <circle id="battery-ring" cx="22" cy="22" r="18" stroke="#34C759" stroke-width="5" stroke-dasharray="113.1" stroke-dashoffset="0" stroke-linecap="round" fill="none"></circle>
           </svg>
         </div>
-        <span id="popup-battery-text" class="text-[14px] font-bold text-neutral-800">100%</span>
+        <span id="popup-battery-text" class="text-[12px] font-bold">100%</span>
+        <span id="popup-battery-hours" class="text-[10px] opacity-75 font-medium">• ~80h</span>
+      </button>
+    </div>
+
+    <!-- Subtítulo antes de conectar -->
+    <p id="popup-desc" style="color: var(--text-sub)" class="text-[11px] leading-snug text-center px-4 mb-4">
+      Toque na bateria acima para atualizar ou em Connect para parear.
+    </p>
+
+    <!-- =========================================================
+         MODO CAMALEÃO - PERFIL 1: FONES COM ANC (UGREEN / QCY)
+    ========================================================= -->
+    <div id="chameleon-headphone-panel" class="hidden space-y-2.5 mb-3.5">
+      <!-- Barra Principal: Off / Ambiente / ANC -->
+      <div class="sea-glass-surface p-1.5 rounded-full grid grid-cols-3 gap-1">
+        <button onclick="setListeningMode('off')" id="mode-off" class="py-2 rounded-full flex items-center justify-center gap-1 opacity-75 font-semibold text-[12px] transition">
+          <span>⚪</span><span>Off</span>
+        </button>
+        <button onclick="setListeningMode('transparency')" id="mode-transparency" class="py-2 rounded-full flex items-center justify-center gap-1 opacity-75 font-semibold text-[12px] transition">
+          <span>👂</span><span>Ambiente</span>
+        </button>
+        <button onclick="setListeningMode('anc')" id="mode-anc" class="py-2 rounded-full flex items-center justify-center gap-1 sea-glass-pill-active font-bold text-[12px] transition">
+          <span>🟢</span><span>ANC</span>
+        </button>
+      </div>
+
+      <!-- Pílulas Extras do UGREEN Studio Pro (Nível ANC, Vento, EQ, Modo Jogo) -->
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="cycleAncDepth()" id="pill-anc-depth" class="sea-glass-surface py-2 px-3 rounded-full flex items-center justify-between text-[11px] font-semibold active:scale-95 transition">
+          <span class="opacity-75">ANC:</span>
+          <span id="label-anc-depth" class="font-bold">Profundo</span>
+        </button>
+
+        <button onclick="toggleWindMode()" id="pill-wind" class="sea-glass-surface py-2 px-3 rounded-full flex items-center justify-between text-[11px] font-semibold active:scale-95 transition">
+          <span class="opacity-75">🌬️ Vento:</span>
+          <span id="label-wind" class="font-bold">Off</span>
+        </button>
+
+        <button onclick="cycleEqPreset()" id="pill-eq" class="sea-glass-surface py-2 px-3 rounded-full flex items-center justify-between text-[11px] font-semibold active:scale-95 transition">
+          <span class="opacity-75">🎵 EQ:</span>
+          <span id="label-eq" class="font-bold">Jazz</span>
+        </button>
+
+        <button onclick="toggleGameMode()" id="pill-game" class="sea-glass-surface py-2 px-3 rounded-full flex items-center justify-between text-[11px] font-semibold active:scale-95 transition">
+          <span class="opacity-75">🎮 Jogo:</span>
+          <span id="label-game" class="font-bold">Fechar</span>
+        </button>
       </div>
     </div>
 
-    <!-- Texto de estado / instrução -->
-    <p id="popup-desc" class="text-[11px] leading-snug text-center text-neutral-400 px-4 mb-5">
-      Toque em Connect para procurar e parear o seu UGREEN Studio Pro.
-    </p>
-
-    <!-- Seletor de Controlo de Ruído no Estilo Sea Glass -->
-    <div id="anc-controls" class="hidden mb-4">
-      <div class="sea-glass-bar p-1.5 rounded-full grid grid-cols-3 gap-1.5">
-        <button onclick="setListeningMode('off')" id="mode-off" class="py-2.5 rounded-full flex items-center justify-center gap-1.5 text-indigo-950/60 font-semibold text-[12px] transition">
-          <span>⚪</span>
-          <span>Off</span>
-        </button>
-        <button onclick="setListeningMode('transparency')" id="mode-transparency" class="py-2.5 rounded-full flex items-center justify-center gap-1.5 text-indigo-950/60 font-semibold text-[12px] transition">
-          <span>👂</span>
-          <span>Ambiente</span>
-        </button>
-        <button onclick="setListeningMode('anc')" id="mode-anc" class="py-2.5 rounded-full flex items-center justify-center gap-1.5 sea-glass-pill-active font-bold text-[12px] transition">
-          <span>🟢</span>
-          <span>ANC</span>
-        </button>
+    <!-- =========================================================
+         MODO CAMALEÃO - PERFIL 2: CAIXAS DE SOM (JBL GO 3 / FLIP 6)
+    ========================================================= -->
+    <div id="chameleon-speaker-panel" class="hidden space-y-2.5 mb-3.5">
+      <div class="sea-glass-surface px-4 py-3 rounded-3xl space-y-2">
+        <div class="flex items-center justify-between text-xs font-bold">
+          <span>🔊 Volume JBL</span>
+          <span id="speaker-vol-label">80%</span>
+        </div>
+        <input type="range" min="0" max="100" value="80" oninput="setSpeakerVolume(this.value)" class="w-full accent-indigo-900 cursor-pointer" />
       </div>
     </div>
 
     <!-- Botão Principal -->
     <button id="btn-main-action" onclick="handleMainAction()" class="w-full py-3.5 rounded-full text-[16px] font-bold sea-glass-btn-main active:scale-[0.98] transition flex items-center justify-center gap-2">
-      <span id="btn-spinner" class="hidden w-4 h-4 border-2 border-indigo-950 border-t-transparent rounded-full animate-spin"></span>
+      <span id="btn-spinner" class="hidden w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
       <span id="btn-text">Connect</span>
     </button>
+
+    <!-- Aviso flutuante de troca de tema -->
+    <div id="glass-toast" class="hidden absolute top-14 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full bg-black/80 text-white shadow-md text-[11px] font-semibold z-50">
+      Sea glass
+    </div>
   </div>
 
   <script>
     let isConnected = false;
     let isSearching = false;
+    let currentBattery = 100;
+
+    // Auto-Dismiss de 6 segundos (Ideia 9)
+    let autoDismissInterval = null;
+    let autoDismissRemaining = 6;
+
+    const DEVICE_CATALOG = {
+      ugreen:    { title: 'UGREEN Studio Pro', type: 'headphone', theme: 'sea',   maxHours: 80 },
+      qcy:       { title: 'QCY H3S',           type: 'headphone', theme: 'jewel', maxHours: 60 },
+      jbl_go3:   { title: 'JBL Go 3',          type: 'speaker',   theme: 'beach', maxHours: 5 },
+      jbl_flip6: { title: 'JBL Flip 6',        type: 'speaker',   theme: 'frost', maxHours: 12 }
+    };
+    let activeProfileKey = 'ugreen';
+
+    // Modos de Tema: Claro, Escuro e Sea Glass
+    const UI_MODES = [
+      { id: 'light',    icon: '☀️', label: 'Modo Claro' },
+      { id: 'dark',     icon: '🌙', label: 'Modo Escuro' },
+      { id: 'seaglass', icon: '✨', label: 'Modo Sea Glass' }
+    ];
+    let uiModeIdx = 0;
+
+    const GLASS_THEMES = [
+      { id: 'sea',   label: 'Sea glass' },
+      { id: 'beach', label: 'Beach glass' },
+      { id: 'jewel', label: 'Jewel glass' },
+      { id: 'frost', label: 'Frost glass' }
+    ];
+    let themeIdx = 0;
+
+    const ANC_DEPTHS = ['Profundo', 'Geral', 'Suave'];
+    let depthIdx = 0;
+    let windOn = false;
+    const EQ_PRESETS = ['Jazz', 'Clássico', 'Baixo', 'Pop'];
+    let eqIdx = 0;
+    let gameModeOn = false;
+
+    // Ideia 8: Vibração Tátil Nativa do S24 FE
+    function vibrateTick() {
+      if (window.AndroidBridge && window.AndroidBridge.vibrateTick) {
+        window.AndroidBridge.vibrateTick();
+      } else if (navigator.vibrate) {
+        navigator.vibrate(14);
+      }
+    }
+
+    function showToast(text) {
+      const toast = document.getElementById('glass-toast');
+      toast.innerText = text;
+      toast.classList.remove('hidden');
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => toast.classList.add('hidden'), 1400);
+    }
+
+    // Alterna entre Tema Claro, Escuro e Sea Glass
+    function cycleUiMode() {
+      vibrateTick();
+      uiModeIdx = (uiModeIdx + 1) % UI_MODES.length;
+      const mode = UI_MODES[uiModeIdx];
+      document.body.setAttribute('data-ui-mode', mode.id);
+      document.getElementById('btn-ui-mode').innerText = mode.icon;
+      localStorage.setItem('studio_pro_ui_mode', String(uiModeIdx));
+      showToast(mode.label);
+    }
+
+    function cycleGlassTheme() {
+      vibrateTick();
+      themeIdx = (themeIdx + 1) % GLASS_THEMES.length;
+      const t = GLASS_THEMES[themeIdx];
+      document.body.setAttribute('data-glass', t.id);
+      localStorage.setItem('studio_pro_glass_theme', String(themeIdx));
+      showToast(t.label);
+    }
+
+    // Consulta e atualiza a bateria real do dispositivo (com estimativa de horas)
+    function refreshDeviceBattery() {
+      vibrateTick();
+      if (window.AndroidBridge && window.AndroidBridge.requestBatteryUpdate) {
+        const level = window.AndroidBridge.requestBatteryUpdate();
+        if (level >= 0 && level <= 100) {
+          updateBattery(level);
+          showToast('Bateria atualizada: ' + level + '%');
+          return;
+        }
+      }
+      showToast('Bateria do dispositivo: ' + currentBattery + '%');
+    }
+
+    function updateBattery(val) {
+      currentBattery = val;
+      document.getElementById('popup-battery-text').innerText = val + '%';
+      const offset = 113.1 - (val / 100) * 113.1;
+      const ring = document.getElementById('battery-ring');
+      if (ring) {
+        ring.style.strokeDashoffset = offset;
+        ring.setAttribute('stroke', val <= 20 ? '#FF3B30' : '#34C759');
+      }
+      const maxH = DEVICE_CATALOG[activeProfileKey]?.maxHours || 80;
+      const estHours = Math.max(1, Math.round((val / 100) * maxH));
+      document.getElementById('popup-battery-hours').innerText = '• ~' + estHours + 'h';
+    }
+
+    // Ideia 9: Auto-Dismiss Inteligente em 6 segundos (cancela ao tocar no cartão)
+    function startAutoDismissTimer() {
+      cancelAutoDismiss();
+      autoDismissRemaining = 6;
+      const bar = document.getElementById('auto-dismiss-bar');
+      bar.classList.remove('hidden');
+      bar.style.width = '100%';
+
+      autoDismissInterval = setInterval(() => {
+        autoDismissRemaining -= 1;
+        bar.style.width = ((autoDismissRemaining / 6) * 100) + '%';
+        if (autoDismissRemaining <= 0) {
+          cancelAutoDismiss();
+          closePopup();
+        }
+      }, 1000);
+    }
+
+    function cancelAutoDismiss() {
+      if (autoDismissInterval) {
+        clearInterval(autoDismissInterval);
+        autoDismissInterval = null;
+      }
+      const bar = document.getElementById('auto-dismiss-bar');
+      if (bar) bar.classList.add('hidden');
+    }
+
+    // Ideia 5: Luz reativa à inclinação do S24 FE
+    function updateLightShift(nx, ny) {
+      const lx = Math.max(-12, Math.min(12, nx * 16));
+      const ly = Math.max(2, Math.min(16, 8 + ny * 12));
+      document.documentElement.style.setProperty('--light-x', lx.toFixed(1) + 'px');
+      document.documentElement.style.setProperty('--light-y', ly.toFixed(1) + 'px');
+      document.documentElement.style.setProperty('--rim-x', (-lx * 0.18).toFixed(1) + 'px');
+      document.documentElement.style.setProperty('--rim-y', (-ly * 0.18).toFixed(1) + 'px');
+    }
+
+    window.addEventListener('deviceorientation', (e) => {
+      if (e.gamma !== null && e.beta !== null) {
+        updateLightShift(e.gamma / 30, (e.beta - 45) / 30);
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      const nx = (e.clientX / window.innerWidth) - 0.5;
+      const ny = (e.clientY / window.innerHeight) - 0.5;
+      updateLightShift(nx * 1.5, ny * 1.5);
+    });
+
+    function cycleAncDepth() {
+      vibrateTick();
+      depthIdx = (depthIdx + 1) % ANC_DEPTHS.length;
+      const depth = ANC_DEPTHS[depthIdx];
+      document.getElementById('label-anc-depth').innerText = depth;
+      if (window.AndroidBridge && window.AndroidBridge.setUgreenExtra) {
+        window.AndroidBridge.setUgreenExtra('anc_depth', depth.toLowerCase());
+      }
+    }
+
+    function toggleWindMode() {
+      vibrateTick();
+      windOn = !windOn;
+      document.getElementById('label-wind').innerText = windOn ? 'Ativo' : 'Off';
+      document.getElementById('pill-wind').classList.toggle('sea-glass-pill-active', windOn);
+      if (window.AndroidBridge && window.AndroidBridge.setUgreenExtra) {
+        window.AndroidBridge.setUgreenExtra('wind', windOn ? 'on' : 'off');
+      }
+    }
+
+    function cycleEqPreset() {
+      vibrateTick();
+      eqIdx = (eqIdx + 1) % EQ_PRESETS.length;
+      const eq = EQ_PRESETS[eqIdx];
+      document.getElementById('label-eq').innerText = eq;
+      if (window.AndroidBridge && window.AndroidBridge.setUgreenExtra) {
+        window.AndroidBridge.setUgreenExtra('eq', eq.toLowerCase());
+      }
+    }
+
+    // Ideia 10: Modo Jogo com selo Low Latency
+    function toggleGameMode() {
+      vibrateTick();
+      gameModeOn = !gameModeOn;
+      document.getElementById('label-game').innerText = gameModeOn ? 'Ativo ⚡' : 'Fechar';
+      document.getElementById('pill-game').classList.toggle('sea-glass-pill-active', gameModeOn);
+      document.getElementById('low-latency-badge').classList.toggle('hidden', !gameModeOn);
+      if (window.AndroidBridge && window.AndroidBridge.setUgreenExtra) {
+        window.AndroidBridge.setUgreenExtra('game_mode', gameModeOn ? 'on' : 'off');
+      }
+    }
+
+    function quickSwitchAudio() {
+      vibrateTick();
+      if (window.AndroidBridge && window.AndroidBridge.switchAudioDevice) {
+        window.AndroidBridge.switchAudioDevice();
+      } else {
+        showToast('Alternando saída de áudio...');
+      }
+    }
+
+    function setSpeakerVolume(val) {
+      document.getElementById('speaker-vol-label').innerText = val + '%';
+      if (window.AndroidBridge && window.AndroidBridge.setSystemVolume) {
+        window.AndroidBridge.setSystemVolume(parseInt(val, 10));
+      }
+    }
 
     function handleBackdropClick(event) {
       if (event.target.id === 'backdrop') {
@@ -163,43 +527,52 @@
       }
     }
 
-    function updateBattery(val) {
-      document.getElementById('popup-battery-text').innerText = val + '%';
-      const offset = 113.1 - (val / 100) * 113.1;
-      const ring = document.getElementById('battery-ring');
-      if (ring) ring.style.strokeDashoffset = offset;
-    }
-
     function setListeningMode(mode) {
+      vibrateTick();
       ['off', 'transparency', 'anc'].forEach((m) => {
         const el = document.getElementById('mode-' + m);
         el.className = m === mode
-          ? 'py-2.5 rounded-full flex items-center justify-center gap-1.5 sea-glass-pill-active font-bold text-[12px] transition'
-          : 'py-2.5 rounded-full flex items-center justify-center gap-1.5 text-indigo-950/60 font-semibold text-[12px] transition';
+          ? 'py-2 rounded-full flex items-center justify-center gap-1 sea-glass-pill-active font-bold text-[12px] transition'
+          : 'py-2 rounded-full flex items-center justify-center gap-1 opacity-75 font-semibold text-[12px] transition';
       });
+      if (window.AndroidBridge && window.AndroidBridge.setAncMode) {
+        window.AndroidBridge.setAncMode(mode);
+      }
+    }
+
+    function applyChameleonProfile(deviceName) {
+      const upper = (deviceName || '').toUpperCase();
+      if (upper.includes('FLIP')) activeProfileKey = 'jbl_flip6';
+      else if (upper.includes('JBL') || upper.includes('GO 3')) activeProfileKey = 'jbl_go3';
+      else if (upper.includes('QCY')) activeProfileKey = 'qcy';
+      else activeProfileKey = 'ugreen';
+
+      const prof = DEVICE_CATALOG[activeProfileKey];
+      document.getElementById('device-title').innerText = deviceName || prof.title;
+      updateBattery(currentBattery);
     }
 
     function handleMainAction() {
+      vibrateTick();
+      cancelAutoDismiss();
       if (isConnected) {
         closePopup();
         return;
       }
       if (isSearching) return;
 
-      // Entra no modo "Procurando fone para parear / conectar"
       isSearching = true;
       document.getElementById('search-radar').classList.remove('hidden');
       document.getElementById('search-radar').classList.add('flex');
       document.getElementById('btn-spinner').classList.remove('hidden');
       document.getElementById('btn-text').innerText = 'Procurando fone...';
-      document.getElementById('popup-desc').innerText = 'A procurar o UGREEN Studio Pro no Bluetooth para parear...';
+      document.getElementById('popup-desc').innerText = 'A procurar o UGREEN Studio Pro para parear...';
 
       if (window.AndroidBridge && window.AndroidBridge.startPairingOrConnect) {
         window.AndroidBridge.startPairingOrConnect();
       }
     }
 
-    // Chamado pelo Android para atualizar o texto enquanto procura ou pareia
     window.updateSearchStatus = function(statusMessage, resetButton) {
       document.getElementById('popup-desc').innerText = statusMessage;
       if (resetButton) {
@@ -211,14 +584,11 @@
       }
     };
 
-    // Chamado pelo Android assim que o fone pareia e conecta
     window.onDeviceConnected = function(deviceName, batteryLevel) {
       isSearching = false;
       isConnected = true;
 
-      if (deviceName) {
-        document.getElementById('device-title').innerText = deviceName;
-      }
+      applyChameleonProfile(deviceName);
       if (batteryLevel >= 0 && batteryLevel <= 100) {
         updateBattery(batteryLevel);
       }
@@ -226,25 +596,44 @@
       document.getElementById('search-radar').classList.add('hidden');
       document.getElementById('search-radar').classList.remove('flex');
       document.getElementById('btn-spinner').classList.add('hidden');
-
-      document.getElementById('popup-battery-badge').classList.remove('hidden');
-      document.getElementById('popup-battery-badge').classList.add('flex');
       document.getElementById('popup-desc').classList.add('hidden');
-      document.getElementById('anc-controls').classList.remove('hidden');
+
+      const isSpeaker = DEVICE_CATALOG[activeProfileKey].type === 'speaker';
+      document.getElementById('chameleon-headphone-panel').classList.toggle('hidden', isSpeaker);
+      document.getElementById('chameleon-speaker-panel').classList.toggle('hidden', !isSpeaker);
 
       document.getElementById('btn-text').innerText = 'Concluído';
+      startAutoDismissTimer();
     };
 
     function closePopup() {
+      cancelAutoDismiss();
       document.getElementById('view-popup').classList.add('hidden');
       if (window.AndroidBridge) window.AndroidBridge.closeOverlay();
     }
 
     window.updateFromAndroid = function(deviceName, batteryLevel, connected) {
+      if (batteryLevel >= 0 && batteryLevel <= 100) {
+        updateBattery(batteryLevel);
+      }
       if (connected) {
         window.onDeviceConnected(deviceName, batteryLevel);
-      } else {
-        if (deviceName) document.getElementById('device-title').innerText = deviceName;
+      } else if (deviceName) {
+        applyChameleonProfile(deviceName);
+      }
+    };
+
+    window.onload = () => {
+      const savedMode = localStorage.getItem('studio_pro_ui_mode');
+      if (savedMode !== null) {
+        uiModeIdx = parseInt(savedMode, 10) % UI_MODES.length;
+        document.body.setAttribute('data-ui-mode', UI_MODES[uiModeIdx].id);
+        document.getElementById('btn-ui-mode').innerText = UI_MODES[uiModeIdx].icon;
+      }
+      const savedGlass = localStorage.getItem('studio_pro_glass_theme');
+      if (savedGlass !== null) {
+        themeIdx = parseInt(savedGlass, 10) % GLASS_THEMES.length;
+        document.body.setAttribute('data-glass', GLASS_THEMES[themeIdx].id);
       }
     };
   </script>
