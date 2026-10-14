@@ -24,7 +24,7 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Criar Ícone Sea Glass e Recortar Foto do Fone
+      - name: Processar Fundo Transparente e Ícone Sea Glass
         run: |
           pip install pillow pillow-avif-plugin
           mkdir -p app/src/main/assets
@@ -38,14 +38,9 @@ jobs:
           python3 - << 'PYEOF'
           import os, glob, random, math
           from PIL import Image, ImageDraw, ImageFilter
-          try:
-              import pillow_avif
-          except Exception:
-              pass
 
           size = 512
           canvas = Image.new("RGBA", (size, size), (246, 238, 228, 255))
-
           shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
           sdraw = ImageDraw.Draw(shadow)
           sdraw.rounded_rectangle([78, 96, 452, 464], radius=118, fill=(182, 118, 232, 135))
@@ -81,24 +76,17 @@ jobs:
 
           bdraw = ImageDraw.Draw(frosted_piece)
           bdraw.rounded_rectangle([54, 54, 434, 434], radius=114, outline=(255, 255, 255, 235), width=8)
-          bdraw.rounded_rectangle([59, 59, 429, 429], radius=110, outline=(255, 255, 255, 110), width=3)
 
           ink = (74, 29, 118, 245)
           bdraw.arc([148, 134, 340, 326], start=180, end=360, fill=ink, width=24)
           bdraw.rounded_rectangle([134, 224, 188, 340], radius=27, fill=ink)
           bdraw.rounded_rectangle([300, 224, 354, 340], radius=27, fill=ink)
-          bdraw.rounded_rectangle([150, 248, 164, 316], radius=7, fill=(248, 232, 255, 215))
-          bdraw.rounded_rectangle([324, 248, 338, 316], radius=7, fill=(248, 232, 255, 215))
 
           canvas.alpha_composite(frosted_piece)
-
           canvas.save("app/src/main/res/drawable/ic_launcher.png")
           for folder, px_size in [
-              ("mipmap-mdpi", 48),
-              ("mipmap-hdpi", 72),
-              ("mipmap-xhdpi", 96),
-              ("mipmap-xxhdpi", 144),
-              ("mipmap-xxxhdpi", 192),
+              ("mipmap-mdpi", 48), ("mipmap-hdpi", 72), ("mipmap-xhdpi", 96),
+              ("mipmap-xxhdpi", 144), ("mipmap-xxxhdpi", 192),
           ]:
               resized = canvas.resize((px_size, px_size), Image.Resampling.LANCZOS)
               resized.save(f"app/src/main/res/{folder}/ic_launcher.png")
@@ -114,40 +102,34 @@ jobs:
           if chosen:
               try:
                   im = Image.open(chosen).convert("RGBA")
-                  im.thumbnail((600, 600), Image.Resampling.LANCZOS)
+                  im.thumbnail((700, 700), Image.Resampling.LANCZOS)
                   w, h = im.size
                   px = im.load()
-                  r0, g0, b0, a0 = px[0, 0]
-                  if a0 > 200:
-                      is_white = (r0 > 215 and g0 > 215 and b0 > 215)
-                      is_black = (r0 < 40 and g0 < 40 and b0 < 40)
-                      if is_white or is_black:
+                  for start_x, start_y in [(0, 0), (w-1, 0), (0, h-1), (w-1, h-1)]:
+                      r_bg, g_bg, b_bg, _ = px[start_x, start_y]
+                      is_white = (r_bg > 190 and g_bg > 190 and b_bg > 190)
+                      is_gray = (abs(r_bg - g_bg) < 15 and abs(g_bg - b_bg) < 15 and r_bg > 100)
+                      is_black = (r_bg < 50 and g_bg < 50 and b_bg < 50)
+                      if is_white or is_gray or is_black:
                           visited = set()
-                          stack = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+                          stack = [(start_x, start_y)]
                           while stack:
                               x, y = stack.pop()
-                              if (x, y) in visited:
-                                  continue
+                              if (x, y) in visited: continue
+                              if x < 0 or x >= w or y < 0 or y >= h: continue
                               visited.add((x, y))
                               r, g, b, a = px[x, y]
                               lum = 0.299 * r + 0.587 * g + 0.114 * b
-                              bg = (lum > 230) if is_white else (lum < 28)
-                              if bg:
+                              match_bg = (lum > 200) if is_white else ((abs(r-g)<15 and r>100) or lum < 55)
+                              if match_bg:
                                   px[x, y] = (r, g, b, 0)
-                                  if x > 0: stack.append((x - 1, y))
-                                  if x < w - 1: stack.append((x + 1, y))
-                                  if y > 0: stack.append((x, y - 1))
-                                  if y < h - 1: stack.append((x, y + 1))
-                              elif is_white and lum > 205:
-                                  px[x, y] = (r, g, b, int(((230 - lum) / 25.0) * 255))
-                              elif is_black and lum < 45:
-                                  px[x, y] = (r, g, b, int(((lum - 28) / 17.0) * 255))
+                                  stack.extend([(x+1, y), (x-1, y), (x, y+1), (x, y-1)])
                   im.save("app/src/main/assets/ugreen_cutout.png")
               except Exception as e:
-                  print("Erro ao processar imagem:", e)
+                  print("Erro processando imagem:", e)
           PYEOF
 
-      - name: Montar estrutura nativa Android (Quick Tile + Haptics + Battery + ANC)
+      - name: Compilar APK Final
         run: |
           mkdir -p app/src/main/java/com/anderson/studiopro
           mkdir -p app/src/main/res/values
@@ -155,20 +137,8 @@ jobs:
           cp studiopro.html app/src/main/assets/index.html
 
           cat << 'EOF' > settings.gradle
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
           rootProject.name = "StudioProS24"
           include(":app")
           EOF
@@ -190,26 +160,18 @@ jobs:
               id("com.android.application")
               id("org.jetbrains.kotlin.android")
           }
-
           android {
               namespace = "com.anderson.studiopro"
               compileSdk = 34
-
               defaultConfig {
                   applicationId = "com.anderson.studiopro"
                   minSdk = 29
                   targetSdk = 34
-                  versionCode = 6
-                  versionName = "6.0-Complete"
+                  versionCode = 9
+                  versionName = "9.0-Refined"
               }
-
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
+              compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+              kotlinOptions { jvmTarget = "17" }
           }
           EOF
 
@@ -228,15 +190,12 @@ jobs:
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.VIBRATE" />
               <uses-permission android:name="android.permission.BLUETOOTH" />
               <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
               <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-              <uses-permission
-                  android:name="android.permission.BLUETOOTH_SCAN"
-                  android:usesPermissionFlags="neverForLocation" />
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
               <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
@@ -245,7 +204,6 @@ jobs:
                   android:icon="@mipmap/ic_launcher"
                   android:roundIcon="@mipmap/ic_launcher_round"
                   android:usesCleartextTraffic="true">
-
                   <activity
                       android:name=".MainActivity"
                       android:icon="@mipmap/ic_launcher"
@@ -260,7 +218,6 @@ jobs:
                       </intent-filter>
                   </activity>
 
-                  <!-- Ideia 7: Botão na Barra Rápida da Samsung (Quick Settings Tile) -->
                   <service
                       android:name=".StudioProTileService"
                       android:label="Studio Pro"
@@ -272,9 +229,7 @@ jobs:
                       </intent-filter>
                   </service>
 
-                  <receiver
-                      android:name=".StudioProReceiver"
-                      android:exported="true">
+                  <receiver android:name=".StudioProReceiver" android:exported="true">
                       <intent-filter>
                           <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
                           <action android:name="android.bluetooth.device.action.BATTERY_LEVEL_CHANGED" />
@@ -294,13 +249,8 @@ jobs:
           class StudioProTileService : TileService() {
               override fun onStartListening() {
                   super.onStartListening()
-                  qsTile?.apply {
-                      state = Tile.STATE_ACTIVE
-                      label = "Studio Pro"
-                      updateTile()
-                  }
+                  qsTile?.apply { state = Tile.STATE_ACTIVE; label = "Studio Pro"; updateTile() }
               }
-
               override fun onClick() {
                   super.onClick()
                   val intent = Intent(this, MainActivity::class.java).apply {
@@ -359,10 +309,9 @@ jobs:
                                   activeDevice = device
                                   BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery()
                                   if (device.bondState == BluetoothDevice.BOND_NONE) {
-                                      pushStatusToWeb("Encontrado ($name)! Solicitando pareamento...", false)
+                                      pushStatusToWeb("Pareando com $name...", false)
                                       device.createBond()
                                   } else {
-                                      pushStatusToWeb("Conectando ao $name...", false)
                                       connectAudioAndControl(device)
                                   }
                               }
@@ -371,18 +320,9 @@ jobs:
                               val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                               val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
                               if (device != null && isTargetDevice(device.name ?: "")) {
-                                  when (state) {
-                                      BluetoothDevice.BOND_BONDING -> {
-                                          pushStatusToWeb("Confirme o pareamento Bluetooth na tela...", false)
-                                      }
-                                      BluetoothDevice.BOND_BONDED -> {
-                                          activeDevice = device
-                                          pushStatusToWeb("Pareado! Conectando áudio...", false)
-                                          connectAudioAndControl(device)
-                                      }
-                                      BluetoothDevice.BOND_NONE -> {
-                                          pushStatusToWeb("Pareamento cancelado. Toque em Connect para tentar novamente.", true)
-                                      }
+                                  if (state == BluetoothDevice.BOND_BONDED) {
+                                      activeDevice = device
+                                      connectAudioAndControl(device)
                                   }
                               }
                           }
@@ -392,11 +332,6 @@ jobs:
                               if (isTargetDevice(name)) {
                                   activeDevice = device
                                   pushToWeb(name, getDeviceBattery(device), true)
-                              }
-                          }
-                          BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
-                              if (!foundDuringScan && activeDevice == null) {
-                                  pushStatusToWeb("Dispositivo não encontrado. Ligue o modo pareamento do fone e tente novamente.", true)
                               }
                           }
                           "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED" -> {
@@ -412,10 +347,7 @@ jobs:
               }
 
               private fun isTargetDevice(name: String): Boolean {
-                  return name.contains("Studio Pro", ignoreCase = true) ||
-                         name.contains("UGREEN", ignoreCase = true) ||
-                         name.contains("QCY", ignoreCase = true) ||
-                         name.contains("JBL", ignoreCase = true)
+                  return name.contains("Studio Pro", ignoreCase = true) || name.contains("UGREEN", ignoreCase = true)
               }
 
               @SuppressLint("MissingPermission")
@@ -430,8 +362,7 @@ jobs:
               @SuppressLint("SetJavaScriptEnabled")
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-
-                  requestNeededPermissions()
+                  requestAllPermissionsEarly()
 
                   webView = WebView(this).apply {
                       setBackgroundColor(Color.TRANSPARENT)
@@ -439,7 +370,6 @@ jobs:
                       settings.domStorageEnabled = true
                       settings.allowFileAccess = true
                       addJavascriptInterface(AndroidBridge(), "AndroidBridge")
-
                       webViewClient = object : WebViewClient() {
                           override fun onPageFinished(view: WebView?, url: String?) {
                               syncBluetoothState()
@@ -447,7 +377,6 @@ jobs:
                       }
                       loadUrl("file:///android_asset/index.html")
                   }
-
                   setContentView(webView)
 
                   val filter = IntentFilter().apply {
@@ -465,21 +394,15 @@ jobs:
                   }
               }
 
-              private fun requestNeededPermissions() {
+              private fun requestAllPermissionsEarly() {
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                       val perms = mutableListOf<String>()
-                      if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                          perms.add(Manifest.permission.BLUETOOTH_CONNECT)
-                      }
-                      if (checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                          perms.add(Manifest.permission.BLUETOOTH_SCAN)
-                      }
-                      if (perms.isNotEmpty()) {
-                          requestPermissions(perms.toTypedArray(), 100)
-                      }
+                      if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) perms.add(Manifest.permission.BLUETOOTH_CONNECT)
+                      if (checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) perms.add(Manifest.permission.BLUETOOTH_SCAN)
+                      if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) perms.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                      if (perms.isNotEmpty()) requestPermissions(perms.toTypedArray(), 100)
                   }
                   if (!Settings.canDrawOverlays(this)) {
-                      Toast.makeText(this, "Ative a permissão 'Aparecer sobre outros apps'", Toast.LENGTH_LONG).show()
                       val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                       startActivity(intent)
                   }
@@ -492,10 +415,7 @@ jobs:
                       for (device in adapter.bondedDevices) {
                           val name = device.name ?: continue
                           if (isTargetDevice(name)) {
-                              val isConn = try {
-                                  device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
-                              } catch (e: Exception) { false }
-
+                              val isConn = try { device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false } catch (e: Exception) { false }
                               if (isConn) {
                                   activeDevice = device
                                   pushToWeb(name, getDeviceBattery(device), true)
@@ -508,55 +428,31 @@ jobs:
 
               @SuppressLint("MissingPermission")
               private fun initiatePairingOrConnect() {
-                  val adapter = BluetoothAdapter.getDefaultAdapter()
-                  if (adapter == null) {
-                      pushStatusToWeb("Bluetooth indisponível.", true)
-                      return
-                  }
+                  val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
                   if (!adapter.isEnabled) {
                       startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                      pushStatusToWeb("Ligue o Bluetooth e toque em Connect novamente.", true)
                       return
                   }
-
                   for (device in adapter.bondedDevices) {
-                      val name = device.name ?: continue
-                      if (isTargetDevice(name)) {
+                      if (isTargetDevice(device.name ?: "")) {
                           activeDevice = device
-                          val isConn = try {
-                              device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
-                          } catch (e: Exception) { false }
-
-                          if (isConn) {
-                              pushToWeb(name, getDeviceBattery(device), true)
-                              return
-                          } else {
-                              pushStatusToWeb("Conectando ao $name...", false)
-                              connectAudioAndControl(device)
-                              return
-                          }
+                          val isConn = try { device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false } catch (e: Exception) { false }
+                          if (isConn) pushToWeb(device.name, getDeviceBattery(device), true)
+                          else connectAudioAndControl(device)
+                          return
                       }
                   }
-
                   foundDuringScan = false
                   if (adapter.isDiscovering) adapter.cancelDiscovery()
-                  val started = adapter.startDiscovery()
-                  if (started) {
-                      pushStatusToWeb("Procurando UGREEN Studio Pro para parear...", false)
-                  } else {
-                      startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                      pushStatusToWeb("Selecione o UGREEN Studio Pro na lista Bluetooth.", true)
-                  }
+                  adapter.startDiscovery()
+                  pushStatusToWeb("Procurando fone...", false)
               }
 
               @SuppressLint("MissingPermission")
               private fun connectAudioAndControl(device: BluetoothDevice) {
                   BluetoothAdapter.getDefaultAdapter()?.getProfileProxy(this, object : BluetoothProfile.ServiceListener {
                       override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                          try {
-                              val connectMethod = proxy.javaClass.getMethod("connect", BluetoothDevice::class.java)
-                              connectMethod.invoke(proxy, device)
-                          } catch (e: Exception) {}
+                          try { proxy.javaClass.getMethod("connect", BluetoothDevice::class.java).invoke(proxy, device) } catch (e: Exception) {}
                           BluetoothAdapter.getDefaultAdapter()?.closeProfileProxy(profile, proxy)
                       }
                       override fun onServiceDisconnected(profile: Int) {}
@@ -564,20 +460,12 @@ jobs:
 
                   Thread {
                       try {
-                          Thread.sleep(1200L)
-                          val isConn = try {
-                              device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
-                          } catch (e: Exception) { false }
-
-                          if (isConn) {
-                              pushToWeb(device.name ?: "UGREEN Studio Pro", getDeviceBattery(device), true)
-                          } else {
-                              val sock = devSocket(device)
-                              rfcommSocket = sock
-                              pushToWeb(device.name ?: "UGREEN Studio Pro", getDeviceBattery(device), true)
-                          }
+                          Thread.sleep(1000L)
+                          val sock = devSocket(device)
+                          rfcommSocket = sock
+                          pushToWeb(device.name ?: "UGREEN Studio Pro", getDeviceBattery(device), true)
                       } catch (e: Exception) {
-                          pushStatusToWeb("Verifique se o fone está ligado e tente novamente.", true)
+                          pushStatusToWeb("Erro ao conectar.", true)
                       }
                   }.start()
               }
@@ -587,12 +475,8 @@ jobs:
                   return try {
                       dev.createInsecureRfcommSocketToServiceRecord(sppUuid).apply { connect() }
                   } catch (e1: Exception) {
-                      try {
-                          dev.createRfcommSocketToServiceRecord(sppUuid).apply { connect() }
-                      } catch (e2: Exception) {
-                          val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.java)
-                          (m.invoke(dev, Integer.valueOf(1)) as BluetoothSocket).apply { connect() }
-                      }
+                      val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.java)
+                      (m.invoke(dev, Integer.valueOf(1)) as BluetoothSocket).apply { connect() }
                   }
               }
 
@@ -613,7 +497,6 @@ jobs:
                       try {
                           if (activeDevice == null) syncBluetoothState()
                           val dev = activeDevice ?: return@Thread
-
                           var sock = rfcommSocket
                           if (sock == null || !sock.isConnected) {
                               val newSock = devSocket(dev)
@@ -621,17 +504,14 @@ jobs:
                               sock = newSock
                               newSock.outputStream.write(hexToBytes("AA BB CC 04 01 00 31 91"))
                               newSock.outputStream.flush()
-                              Thread.sleep(60L)
+                              Thread.sleep(50L)
                               newSock.outputStream.write(hexToBytes("AA BB CC 01 01 00 21 90"))
                               newSock.outputStream.flush()
-                              Thread.sleep(60L)
+                              Thread.sleep(50L)
                           }
-
                           sock?.outputStream?.write(hexToBytes(hexCmd))
                           sock?.outputStream?.flush()
-                      } catch (e: Exception) {
-                          closeRfcomm()
-                      }
+                      } catch (e: Exception) { closeRfcomm() }
                   }.start()
               }
 
@@ -642,16 +522,12 @@ jobs:
 
               private fun pushToWeb(name: String?, battery: Int, connected: Boolean) {
                   val safeName = name?.let { "'$it'" } ?: "null"
-                  webView.post {
-                      webView.evaluateJavascript("if(window.updateFromAndroid) window.updateFromAndroid($safeName, $battery, $connected);", null)
-                  }
+                  webView.post { webView.evaluateJavascript("if(window.updateFromAndroid) window.updateFromAndroid($safeName, $battery, $connected);", null) }
               }
 
               private fun pushStatusToWeb(msg: String, resetBtn: Boolean) {
                   val safeMsg = msg.replace("'", "\\'")
-                  webView.post {
-                      webView.evaluateJavascript("if(window.updateSearchStatus) window.updateSearchStatus('$safeMsg', $resetBtn);", null)
-                  }
+                  webView.post { webView.evaluateJavascript("if(window.updateSearchStatus) window.updateSearchStatus('$safeMsg', $resetBtn);", null) }
               }
 
               override fun onDestroy() {
@@ -662,12 +538,7 @@ jobs:
 
               inner class AndroidBridge {
                   @JavascriptInterface
-                  fun closeOverlay() {
-                      runOnUiThread {
-                          closeRfcomm()
-                          finish()
-                      }
-                  }
+                  fun closeOverlay() { runOnUiThread { closeRfcomm(); finish() } }
 
                   @JavascriptInterface
                   fun vibrateTick() {
@@ -688,9 +559,7 @@ jobs:
                   }
 
                   @JavascriptInterface
-                  fun startPairingOrConnect() {
-                      runOnUiThread { initiatePairingOrConnect() }
-                  }
+                  fun startPairingOrConnect() { runOnUiThread { initiatePairingOrConnect() } }
 
                   @JavascriptInterface
                   fun switchAudioDevice() {
@@ -699,24 +568,10 @@ jobs:
                               val adapter = BluetoothAdapter.getDefaultAdapter() ?: return@runOnUiThread
                               val bonded = adapter.bondedDevices.filter { isTargetDevice(it.name ?: "") }
                               val nextDev = bonded.firstOrNull { it.address != activeDevice?.address } ?: bonded.firstOrNull()
-                              if (nextDev != null) {
-                                  activeDevice = nextDev
-                                  connectAudioAndControl(nextDev)
-                              } else {
-                                  startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                              }
+                              if (nextDev != null) { activeDevice = nextDev; connectAudioAndControl(nextDev) }
+                              else startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
                           } catch (e: Exception) {}
                       }
-                  }
-
-                  @JavascriptInterface
-                  fun setSystemVolume(percent: Int) {
-                      try {
-                          val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                          val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                          val target = ((percent / 100.0) * max).toInt().coerceIn(0, max)
-                          am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
-                      } catch (e: Exception) {}
                   }
 
                   @JavascriptInterface
@@ -729,9 +584,7 @@ jobs:
                   }
 
                   @JavascriptInterface
-                  fun setUgreenExtra(feature: String, value: String) {
-                      // Pronto para receber os bytes de Profundo/Geral/Suave, Vento, EQ e Modo Jogo
-                  }
+                  fun setUgreenExtra(feature: String, value: String) {}
               }
           }
           EOF
@@ -751,11 +604,7 @@ jobs:
                   if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
                   val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                   val name = device?.name ?: return
-
-                  if (name.contains("Studio Pro", ignoreCase = true) ||
-                      name.contains("UGREEN", ignoreCase = true) ||
-                      name.contains("QCY", ignoreCase = true) ||
-                      name.contains("JBL", ignoreCase = true)) {
+                  if (name.contains("Studio Pro", ignoreCase = true) || name.contains("UGREEN", ignoreCase = true)) {
                       val popupIntent = Intent(context, MainActivity::class.java).apply {
                           addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                       }
@@ -765,7 +614,7 @@ jobs:
           }
           EOF
 
-      - name: Compilar o APK
+      - name: Compilar APK Final
         run: gradle assembleDebug
 
       - name: Disponibilizar APK para Download
