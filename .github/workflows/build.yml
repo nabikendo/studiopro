@@ -45,17 +45,14 @@ jobs:
 
           # 1. CRIA O ÍCONE "SEA GLASS" FIEL AO VÍDEO DE REFERÊNCIA
           size = 512
-          # Base areia/creme suave do tema Sea Glass para Adaptive Icon da Samsung
           canvas = Image.new("RGBA", (size, size), (246, 238, 228, 255))
 
-          # Sombra difusa colorida (lilás/rosa translúcido projetado à direita/baixo)
           shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
           sdraw = ImageDraw.Draw(shadow)
           sdraw.rounded_rectangle([78, 96, 452, 464], radius=118, fill=(182, 118, 232, 135))
           shadow = shadow.filter(ImageFilter.GaussianBlur(24))
           canvas.alpha_composite(shadow)
 
-          # Peça de vidro marinho fosco (gradiente Rosa-Lilás -> Azul-Celeste -> Verde-Água)
           glass = Image.new("RGBA", (size, size), (0, 0, 0, 0))
           gpx = glass.load()
           random.seed(42)
@@ -63,16 +60,13 @@ jobs:
               u = (y - 52) / 384.0
               for x in range(52, 436):
                   t = (x - 52) / 384.0
-                  # Mistura suave das cores Sea Glass do vídeo
                   r = int(242 * (1 - t * 0.45) + 180 * (t * 0.45))
                   g = int(188 * (1 - u * 0.5) + 228 * (u * 0.5))
                   b = int(252)
-                  # Luz interna mais clara no canto superior esquerdo
                   highlight = max(0.0, 1.0 - math.hypot(t - 0.22, u - 0.22) * 1.35)
                   r = min(255, int(r + highlight * 28))
                   g = min(255, int(g + highlight * 28))
                   b = min(255, int(b + highlight * 15))
-                  # Textura granulada característica do Sea Glass (Frosted Sea Glass Grain)
                   grain = random.randint(-9, 9)
                   r = max(0, min(255, r + grain))
                   g = max(0, min(255, g + grain))
@@ -86,25 +80,19 @@ jobs:
           frosted_piece = Image.new("RGBA", (size, size), (0, 0, 0, 0))
           frosted_piece.paste(glass, (0, 0), mask)
 
-          # Borda interna branca brilhante de refração de vidro
           bdraw = ImageDraw.Draw(frosted_piece)
           bdraw.rounded_rectangle([54, 54, 434, 434], radius=114, outline=(255, 255, 255, 235), width=8)
           bdraw.rounded_rectangle([59, 59, 429, 429], radius=110, outline=(255, 255, 255, 110), width=3)
 
-          # Glifo minimalista do Auscultador no mesmo tom Roxo/Índigo profundo do vídeo Sea Glass
           ink = (74, 29, 118, 245)
-          # Arco superior
           bdraw.arc([148, 134, 340, 326], start=180, end=360, fill=ink, width=24)
-          # Almofadas esquerda e direita em formato cápsula
           bdraw.rounded_rectangle([134, 224, 188, 340], radius=27, fill=ink)
           bdraw.rounded_rectangle([300, 224, 354, 340], radius=27, fill=ink)
-          # Brilho interno nas conchas
           bdraw.rounded_rectangle([150, 248, 164, 316], radius=7, fill=(248, 232, 255, 215))
           bdraw.rounded_rectangle([324, 248, 338, 316], radius=7, fill=(248, 232, 255, 215))
 
           canvas.alpha_composite(frosted_piece)
 
-          # Guarda em todas as resoluções do Android / Samsung One UI
           canvas.save("app/src/main/res/drawable/ic_launcher.png")
           for folder, px_size in [
               ("mipmap-mdpi", 48),
@@ -161,7 +149,7 @@ jobs:
                   print("Erro ao processar imagem:", e)
           PYEOF
 
-      - name: Montar estrutura nativa Android com Controlo ANC Real
+      - name: Montar estrutura nativa Android com Busca, Pareamento e ANC
         run: |
           mkdir -p app/src/main/java/com/anderson/studiopro
           mkdir -p app/src/main/res/values
@@ -170,12 +158,6 @@ jobs:
 
           cat << 'EOF' >> app/src/main/assets/index.html
           <script>
-            const origClose = window.closePopup;
-            window.closePopup = function() {
-              if (origClose) origClose();
-              if (window.AndroidBridge) window.AndroidBridge.closeOverlay();
-            };
-
             const origSetMode = window.setListeningMode;
             window.setListeningMode = function(mode) {
               if (origSetMode) origSetMode(mode);
@@ -231,8 +213,8 @@ jobs:
                   applicationId = "com.anderson.studiopro"
                   minSdk = 29
                   targetSdk = 34
-                  versionCode = 4
-                  versionName = "4.0-SeaGlass"
+                  versionCode = 5
+                  versionName = "5.0-PairAndANC"
               }
 
               compileOptions {
@@ -265,6 +247,10 @@ jobs:
               <uses-permission android:name="android.permission.BLUETOOTH" />
               <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
               <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+              <uses-permission
+                  android:name="android.permission.BLUETOOTH_SCAN"
+                  android:usesPermissionFlags="neverForLocation" />
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
               <application
@@ -307,6 +293,7 @@ jobs:
           import android.app.Activity
           import android.bluetooth.BluetoothAdapter
           import android.bluetooth.BluetoothDevice
+          import android.bluetooth.BluetoothProfile
           import android.bluetooth.BluetoothSocket
           import android.content.BroadcastReceiver
           import android.content.Context
@@ -319,24 +306,71 @@ jobs:
           import android.os.Bundle
           import android.provider.Settings
           import android.webkit.JavascriptInterface
-          import android.webkit.ValueCallback
-          import android.webkit.WebChromeClient
           import android.webkit.WebView
           import android.webkit.WebViewClient
           import android.widget.Toast
-          import java.io.File
           import java.util.UUID
 
           class MainActivity : Activity() {
               private lateinit var webView: WebView
-              private var filePathCallback: ValueCallback<Array<Uri>>? = null
               private var activeDevice: BluetoothDevice? = null
               private var rfcommSocket: BluetoothSocket? = null
+              private var foundDuringScan: Boolean = false
               private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
               private val btReceiver = object : BroadcastReceiver() {
+                  @SuppressLint("MissingPermission")
                   override fun onReceive(context: Context?, intent: Intent?) {
                       when (intent?.action) {
+                          BluetoothDevice.ACTION_FOUND -> {
+                              val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                              val name = device?.name ?: return
+                              if (isTargetHeadphone(name)) {
+                                  foundDuringScan = true
+                                  activeDevice = device
+                                  BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery()
+                                  if (device.bondState == BluetoothDevice.BOND_NONE) {
+                                      pushStatusToWeb("Fone encontrado ($name)! Solicitando pareamento...", false)
+                                      device.createBond()
+                                  } else {
+                                      pushStatusToWeb("Conectando ao $name...", false)
+                                      connectAudioAndControl(device)
+                                  }
+                              }
+                          }
+                          BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
+                              val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                              val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+                              if (device != null && isTargetHeadphone(device.name ?: "")) {
+                                  when (state) {
+                                      BluetoothDevice.BOND_BONDING -> {
+                                          pushStatusToWeb("Confirme o pareamento Bluetooth na tela...", false)
+                                      }
+                                      BluetoothDevice.BOND_BONDED -> {
+                                          activeDevice = device
+                                          pushStatusToWeb("Pareado com sucesso! Conectando áudio...", false)
+                                          connectAudioAndControl(device)
+                                      }
+                                      BluetoothDevice.BOND_NONE -> {
+                                          pushStatusToWeb("Pareamento cancelado. Toque em Connect para tentar novamente.", true)
+                                      }
+                                  }
+                              }
+                          }
+                          BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                              val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                              val name = device?.name ?: return
+                              if (isTargetHeadphone(name)) {
+                                  activeDevice = device
+                                  val battery = getDeviceBattery(device)
+                                  pushToWeb(name, battery, true)
+                              }
+                          }
+                          BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                              if (!foundDuringScan && activeDevice == null) {
+                                  pushStatusToWeb("Fone não encontrado por perto. Coloque o fone em modo de pareamento e toque em Connect.", true)
+                              }
+                          }
                           "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED" -> {
                               val level = intent.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL", -1)
                               if (level in 0..100) pushToWeb(null, level, true)
@@ -347,6 +381,19 @@ jobs:
                           }
                       }
                   }
+              }
+
+              private fun isTargetHeadphone(name: String): Boolean {
+                  return name.contains("Studio Pro", ignoreCase = true) ||
+                         name.contains("UGREEN", ignoreCase = true)
+              }
+
+              @SuppressLint("MissingPermission")
+              private fun getDeviceBattery(device: BluetoothDevice): Int {
+                  val b = try {
+                      device.javaClass.getMethod("getBatteryLevel").invoke(device) as? Int ?: 100
+                  } catch (e: Exception) { 100 }
+                  return if (b in 0..100) b else 100
               }
 
               @SuppressLint("SetJavaScriptEnabled")
@@ -367,31 +414,18 @@ jobs:
                               syncBluetoothState()
                           }
                       }
-
-                      webChromeClient = object : WebChromeClient() {
-                          override fun onShowFileChooser(
-                              webView: WebView?,
-                              callback: ValueCallback<Array<Uri>>?,
-                              params: FileChooserParams?
-                          ): Boolean {
-                              filePathCallback?.onReceiveValue(null)
-                              filePathCallback = callback
-                              val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                                  addCategory(Intent.CATEGORY_OPENABLE)
-                                  type = "image/*"
-                              }
-                              startActivityForResult(Intent.createChooser(intent, "Escolher Foto do Fone"), 1001)
-                              return true
-                          }
-                      }
                       loadUrl("file:///android_asset/index.html")
                   }
 
                   setContentView(webView)
 
                   val filter = IntentFilter().apply {
-                      addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED")
+                      addAction(BluetoothDevice.ACTION_FOUND)
+                      addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                      addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
                       addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+                      addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+                      addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED")
                   }
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                       registerReceiver(btReceiver, filter, Context.RECEIVER_EXPORTED)
@@ -402,8 +436,15 @@ jobs:
 
               private fun requestNeededPermissions() {
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                      val perms = mutableListOf<String>()
                       if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                          requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 100)
+                          perms.add(Manifest.permission.BLUETOOTH_CONNECT)
+                      }
+                      if (checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                          perms.add(Manifest.permission.BLUETOOTH_SCAN)
+                      }
+                      if (perms.isNotEmpty()) {
+                          requestPermissions(perms.toTypedArray(), 100)
                       }
                   }
                   if (!Settings.canDrawOverlays(this)) {
@@ -419,23 +460,118 @@ jobs:
                       val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
                       for (device in adapter.bondedDevices) {
                           val name = device.name ?: continue
-                          if (name.contains("Studio Pro", true) || name.contains("UGREEN", true)) {
+                          if (isTargetHeadphone(name)) {
                               val isConn = try {
                                   device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
                               } catch (e: Exception) { false }
 
-                              val battery = try {
-                                  device.javaClass.getMethod("getBatteryLevel").invoke(device) as? Int ?: 100
-                              } catch (e: Exception) { 100 }
-
                               if (isConn) {
                                   activeDevice = device
-                                  pushToWeb(name, if (battery in 0..100) battery else 100, true)
+                                  pushToWeb(name, getDeviceBattery(device), true)
                                   return
                               }
                           }
                       }
                   } catch (e: Exception) {}
+              }
+
+              @SuppressLint("MissingPermission")
+              private fun initiatePairingOrConnect() {
+                  val adapter = BluetoothAdapter.getDefaultAdapter()
+                  if (adapter == null) {
+                      pushStatusToWeb("Bluetooth não disponível.", true)
+                      return
+                  }
+                  if (!adapter.isEnabled) {
+                      val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                      startActivity(enableBtIntent)
+                      pushStatusToWeb("Ligue o Bluetooth e toque em Connect novamente.", true)
+                      return
+                  }
+
+                  // 1. Verifica se já está pareado no S24 FE
+                  for (device in adapter.bondedDevices) {
+                      val name = device.name ?: continue
+                      if (isTargetHeadphone(name)) {
+                          activeDevice = device
+                          val isConn = try {
+                              device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
+                          } catch (e: Exception) { false }
+
+                          if (isConn) {
+                              pushToWeb(name, getDeviceBattery(device), true)
+                              return
+                          } else {
+                              pushStatusToWeb("Fone pareado encontrado! Conectando ao $name...", false)
+                              connectAudioAndControl(device)
+                              return
+                          }
+                      }
+                  }
+
+                  // 2. Se ainda não estiver pareado, inicia o radar Bluetooth para encontrar e parear
+                  foundDuringScan = false
+                  if (adapter.isDiscovering) {
+                      adapter.cancelDiscovery()
+                  }
+                  val started = adapter.startDiscovery()
+                  if (started) {
+                      pushStatusToWeb("Procurando UGREEN Studio Pro para parear...", false)
+                  } else {
+                      // Caso o sistema exija abrir o painel de pareamento do Android
+                      startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                      pushStatusToWeb("Selecione o UGREEN Studio Pro na lista Bluetooth.", true)
+                  }
+              }
+
+              @SuppressLint("MissingPermission")
+              private fun connectAudioAndControl(device: BluetoothDevice) {
+                  // Solicita ao Android que conecte o perfil de áudio A2DP ao fone
+                  BluetoothAdapter.getDefaultAdapter()?.getProfileProxy(this, object : BluetoothProfile.ServiceListener {
+                      override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+                          try {
+                              val connectMethod = proxy.javaClass.getMethod("connect", BluetoothDevice::class.java)
+                              connectMethod.invoke(proxy, device)
+                          } catch (e: Exception) {}
+                          BluetoothAdapter.getDefaultAdapter()?.closeProfileProxy(profile, proxy)
+                      }
+                      override fun onServiceDisconnected(profile: Int) {}
+                  }, BluetoothProfile.A2DP)
+
+                  // Tenta estabelecer o canal RFCOMM da UGREEN e atualiza o cartão
+                  Thread {
+                      try {
+                          Thread.sleep(1200L)
+                          val isConn = try {
+                              device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
+                          } catch (e: Exception) { false }
+
+                          if (isConn) {
+                              pushToWeb(device.name ?: "UGREEN Studio Pro", getDeviceBattery(device), true)
+                          } else {
+                              // Tenta forçar despertar via socket RFCOMM
+                              val sock = devSocket(device)
+                              rfcommSocket = sock
+                              pushToWeb(device.name ?: "UGREEN Studio Pro", getDeviceBattery(device), true)
+                          }
+                      } catch (e: Exception) {
+                          pushStatusToWeb("Não foi possível conectar. Verifique se o fone está ligado.", true)
+                      }
+                  }.start()
+              }
+
+              @SuppressLint("MissingPermission")
+              private fun devSocket(dev: BluetoothDevice): BluetoothSocket {
+                  return try {
+                      dev.createInsecureRfcommSocketToServiceRecord(sppUuid).apply { connect() }
+                  } catch (e1: Exception) {
+                      try {
+                          dev.createRfcommSocketToServiceRecord(sppUuid).apply { connect() }
+                      } catch (e2: Exception) {
+                          val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.java)
+                          (m.invoke(dev, Integer.valueOf(1)) as BluetoothSocket).apply { connect() }
+                      }
+                  }
               }
 
               private fun hexToBytes(hex: String): ByteArray {
@@ -460,16 +596,7 @@ jobs:
 
                           var sock = rfcommSocket
                           if (sock == null || !sock.isConnected) {
-                              val newSock = try {
-                                  dev.createInsecureRfcommSocketToServiceRecord(sppUuid).apply { connect() }
-                              } catch (e1: Exception) {
-                                  try {
-                                      dev.createRfcommSocketToServiceRecord(sppUuid).apply { connect() }
-                                  } catch (e2: Exception) {
-                                      val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.java)
-                                      (m.invoke(dev, Integer.valueOf(1)) as BluetoothSocket).apply { connect() }
-                                  }
-                              }
+                              val newSock = devSocket(dev)
                               rfcommSocket = newSock
                               sock = newSock
                               newSock.outputStream.write(hexToBytes("AA BB CC 04 01 00 31 91"))
@@ -500,12 +627,10 @@ jobs:
                   }
               }
 
-              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                  super.onActivityResult(requestCode, resultCode, data)
-                  if (requestCode == 1001) {
-                      val result = if (resultCode == RESULT_OK && data?.data != null) arrayOf(data.data!!) else null
-                      filePathCallback?.onReceiveValue(result)
-                      filePathCallback = null
+              private fun pushStatusToWeb(msg: String, resetBtn: Boolean) {
+                  val safeMsg = msg.replace("'", "\\'")
+                  webView.post {
+                      webView.evaluateJavascript("if(window.updateSearchStatus) window.updateSearchStatus('$safeMsg', $resetBtn);", null)
                   }
               }
 
@@ -525,27 +650,19 @@ jobs:
                   }
 
                   @JavascriptInterface
+                  fun startPairingOrConnect() {
+                      runOnUiThread {
+                          initiatePairingOrConnect()
+                      }
+                  }
+
+                  @JavascriptInterface
                   fun setAncMode(mode: String) {
                       when (mode) {
                           "anc" -> sendUgreenCommand("AA BB CC 09 01 A1 61 EA")
                           "off" -> sendUgreenCommand("AA BB CC 09 01 A0 A0 2A")
                           "transparency" -> sendUgreenCommand("AA BB CC 09 01 A2 21 EB")
                       }
-                  }
-
-                  @JavascriptInterface
-                  fun savePermanentPhoto(dataUrl: String) {
-                      try {
-                          File(filesDir, "ugreen_cutout.txt").writeText(dataUrl)
-                      } catch (e: Exception) {}
-                  }
-
-                  @JavascriptInterface
-                  fun loadPermanentPhoto(): String {
-                      return try {
-                          val f = File(filesDir, "ugreen_cutout.txt")
-                          if (f.exists()) f.readText() else ""
-                      } catch (e: Exception) { "" }
                   }
               }
           }
