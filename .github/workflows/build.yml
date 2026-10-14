@@ -24,29 +24,42 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Montar estrutura nativa Android (S24 FE)
+      - name: Montar estrutura nativa Android com Controlo ANC Real
         run: |
           mkdir -p app/src/main/java/com/anderson/studiopro
           mkdir -p app/src/main/assets
           mkdir -p app/src/main/res/values
 
-          # Copia o seu studiopro.html para dentro do app Android
           cp studiopro.html app/src/main/assets/index.html
 
-          # Injeta a ponte nativa Android (Bateria real Bluetooth + Fechar janela) no HTML
+          # Liga os botões Off / Transparency / ANC do HTML ao transmissor Bluetooth do Android
           cat << 'EOF' >> app/src/main/assets/index.html
           <script>
-            // Fecha a janela transparente do Android ao clicar no X ou fora do cartão
             const origClose = window.closePopup;
             window.closePopup = function() {
               if (origClose) origClose();
               if (window.AndroidBridge) window.AndroidBridge.closeOverlay();
             };
 
-            // Recebe o nome do fone e a bateria real enviados pelo Bluetooth do S24 FE
+            const origSetMode = window.setListeningMode;
+            window.setListeningMode = function(mode) {
+              if (origSetMode) origSetMode(mode);
+              if (window.AndroidBridge && window.AndroidBridge.setAncMode) {
+                window.AndroidBridge.setAncMode(mode);
+              }
+            };
+
             window.updateFromAndroid = function(deviceName, batteryLevel, connected) {
               if (deviceName) {
-                document.querySelectorAll('h1, h2').forEach(el => el.innerText = deviceName);
+                if (typeof switchDeviceProfile === 'function') {
+                  if (deviceName.toUpperCase().includes('QCY')) {
+                    switchDeviceProfile('qcy');
+                  } else {
+                    switchDeviceProfile('ugreen');
+                  }
+                }
+                const titleEl = document.getElementById('device-title');
+                if (titleEl) titleEl.innerText = deviceName;
               }
               if (batteryLevel >= 0 && batteryLevel <= 100) {
                 updateBattery(batteryLevel);
@@ -103,8 +116,8 @@ jobs:
                   applicationId = "com.anderson.studiopro"
                   minSdk = 29
                   targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
+                  versionCode = 2
+                  versionName = "2.0-ANC"
               }
 
               compileOptions {
@@ -135,6 +148,7 @@ jobs:
 
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.BLUETOOTH" />
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
               <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
@@ -174,6 +188,7 @@ jobs:
           import android.app.Activity
           import android.bluetooth.BluetoothAdapter
           import android.bluetooth.BluetoothDevice
+          import android.bluetooth.BluetoothSocket
           import android.content.BroadcastReceiver
           import android.content.Context
           import android.content.Intent
@@ -190,10 +205,21 @@ jobs:
           import android.webkit.WebView
           import android.webkit.WebViewClient
           import android.widget.Toast
+          import java.util.UUID
 
           class MainActivity : Activity() {
               private lateinit var webView: WebView
               private var filePathCallback: ValueCallback<Array<Uri>>? = null
+              private var activeDevice: BluetoothDevice? = null
+              private var rfcommSocket: BluetoothSocket? = null
+              private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+              // Pacotes extraídos via engenharia reversa (btsnoop_hci) do UGREEN Studio Pro
+              private val CMD_HANDSHAKE_1 = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x04, 0x01, 0x00, 0x31, 0x91.toByte())
+              private val CMD_HANDSHAKE_2 = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x01, 0x01, 0x00, 0x21, 0x90.toByte())
+              private val CMD_ANC_ON      = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x09, 0x01, 0xA1.toByte(), 0x61, 0xEA.toByte())
+              private val CMD_ANC_OFF     = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x09, 0x01, 0xA0.toByte(), 0xA0.toByte(), 0x2A)
+              private val CMD_TRANSPARENT = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x09, 0x01, 0xA2.toByte(), 0x21, 0xEB.toByte())
 
               private val btReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
@@ -203,6 +229,7 @@ jobs:
                               if (level in 0..100) pushToWeb(null, level, true)
                           }
                           BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                              closeRfcomm()
                               finish()
                           }
                       }
@@ -267,7 +294,7 @@ jobs:
                       }
                   }
                   if (!Settings.canDrawOverlays(this)) {
-                      Toast.makeText(this, "Ative a permissão 'Aparecer sobre outros apps' para o Pop-up automático", Toast.LENGTH_LONG).show()
+                      Toast.makeText(this, "Ative a permissão 'Aparecer sobre outros apps'", Toast.LENGTH_LONG).show()
                       val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                       startActivity(intent)
                   }
@@ -289,12 +316,57 @@ jobs:
                               } catch (e: Exception) { 100 }
 
                               if (isConn) {
+                                  activeDevice = device
                                   pushToWeb(name, if (battery in 0..100) battery else 100, true)
                                   return
                               }
                           }
                       }
                   } catch (e: Exception) {}
+              }
+
+              @SuppressLint("MissingPermission")
+              private fun sendUgreenCommand(cmdBytes: ByteArray) {
+                  Thread {
+                      try {
+                          val dev = activeDevice ?: run {
+                              syncBluetoothState()
+                              activeDevice
+                          } ?: return@Thread
+
+                          var sock = rfcommSocket
+                          if (sock == null || !sock.isConnected) {
+                              sock = try {
+                                  dev.createInsecureRfcommSocketToServiceRecord(sppUuid).apply { connect() }
+                              } catch (e1: Exception) {
+                                  try {
+                                      dev.createRfcommSocketToServiceRecord(sppUuid).apply { connect() }
+                                  } catch (e2: Exception) {
+                                      val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                                      (m.invoke(dev, 1) as BluetoothSocket).apply { connect() }
+                                  }
+                              }
+                              rfcommSocket = sock
+                              // Envia o handshake inicial da UGREEN ao abrir o canal
+                              sock.outputStream.write(CMD_HANDSHAKE_1)
+                              sock.outputStream.flush()
+                              Thread.sleep(60)
+                              sock.outputStream.write(CMD_HANDSHAKE_2)
+                              sock.outputStream.flush()
+                              Thread.sleep(60)
+                          }
+
+                          sock.outputStream.write(cmdBytes)
+                          sock.outputStream.flush()
+                      } catch (e: Exception) {
+                          closeRfcomm()
+                      }
+                  }.start()
+              }
+
+              private fun closeRfcomm() {
+                  try { rfcommSocket?.close() } catch (e: Exception) {}
+                  rfcommSocket = null
               }
 
               private fun pushToWeb(name: String?, battery: Int, connected: Boolean) {
@@ -315,13 +387,26 @@ jobs:
 
               override fun onDestroy() {
                   super.onDestroy()
+                  closeRfcomm()
                   try { unregisterReceiver(btReceiver) } catch (e: Exception) {}
               }
 
               inner class AndroidBridge {
                   @JavascriptInterface
                   fun closeOverlay() {
-                      runOnUiThread { finish() }
+                      runOnUiThread {
+                          closeRfcomm()
+                          finish()
+                      }
+                  }
+
+                  @JavascriptInterface
+                  fun setAncMode(mode: String) {
+                      when (mode) {
+                          "anc" -> sendUgreenCommand(CMD_ANC_ON)
+                          "off" -> sendUgreenCommand(CMD_ANC_OFF)
+                          "transparency" -> sendUgreenCommand(CMD_TRANSPARENT)
+                      }
                   }
               }
           }
