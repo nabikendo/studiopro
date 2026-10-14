@@ -24,7 +24,7 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Processar Fundo Transparente e Ícone Sea Glass
+      - name: Copiar Imagem Transparente Original e Gerar Ícone
         run: |
           pip install pillow pillow-avif-plugin
           mkdir -p app/src/main/assets
@@ -102,31 +102,9 @@ jobs:
           if chosen:
               try:
                   im = Image.open(chosen).convert("RGBA")
-                  im.thumbnail((700, 700), Image.Resampling.LANCZOS)
-                  w, h = im.size
-                  px = im.load()
-                  for start_x, start_y in [(0, 0), (w-1, 0), (0, h-1), (w-1, h-1)]:
-                      r_bg, g_bg, b_bg, _ = px[start_x, start_y]
-                      is_white = (r_bg > 190 and g_bg > 190 and b_bg > 190)
-                      is_gray = (abs(r_bg - g_bg) < 15 and abs(g_bg - b_bg) < 15 and r_bg > 100)
-                      is_black = (r_bg < 50 and g_bg < 50 and b_bg < 50)
-                      if is_white or is_gray or is_black:
-                          visited = set()
-                          stack = [(start_x, start_y)]
-                          while stack:
-                              x, y = stack.pop()
-                              if (x, y) in visited: continue
-                              if x < 0 or x >= w or y < 0 or y >= h: continue
-                              visited.add((x, y))
-                              r, g, b, a = px[x, y]
-                              lum = 0.299 * r + 0.587 * g + 0.114 * b
-                              match_bg = (lum > 200) if is_white else ((abs(r-g)<15 and r>100) or lum < 55)
-                              if match_bg:
-                                  px[x, y] = (r, g, b, 0)
-                                  stack.extend([(x+1, y), (x-1, y), (x, y+1), (x, y-1)])
                   im.save("app/src/main/assets/ugreen_cutout.png")
               except Exception as e:
-                  print("Erro processando imagem:", e)
+                  print("Erro:", e)
           PYEOF
 
       - name: Compilar APK Final
@@ -167,8 +145,8 @@ jobs:
                   applicationId = "com.anderson.studiopro"
                   minSdk = 29
                   targetSdk = 34
-                  versionCode = 9
-                  versionName = "9.0-Refined"
+                  versionCode = 13
+                  versionName = "13.0-NightReady"
               }
               compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
               kotlinOptions { jvmTarget = "17" }
@@ -304,10 +282,12 @@ jobs:
                           BluetoothDevice.ACTION_FOUND -> {
                               val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                               val name = device?.name ?: return
+                              val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
                               if (isTargetDevice(name)) {
                                   foundDuringScan = true
                                   activeDevice = device
                                   BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery()
+                                  pushRssiToWeb(rssi)
                                   if (device.bondState == BluetoothDevice.BOND_NONE) {
                                       pushStatusToWeb("Pareando com $name...", false)
                                       device.createBond()
@@ -331,12 +311,12 @@ jobs:
                               val name = device?.name ?: return
                               if (isTargetDevice(name)) {
                                   activeDevice = device
-                                  pushToWeb(name, getDeviceBattery(device), true)
+                                  pushToWeb(name, getDeviceBattery(device), true, -55)
                               }
                           }
                           "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED" -> {
                               val level = intent.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL", -1)
-                              if (level in 0..100) pushToWeb(null, level, true)
+                              if (level in 0..100) pushToWeb(null, level, true, null)
                           }
                           BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                               closeRfcomm()
@@ -418,7 +398,7 @@ jobs:
                               val isConn = try { device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false } catch (e: Exception) { false }
                               if (isConn) {
                                   activeDevice = device
-                                  pushToWeb(name, getDeviceBattery(device), true)
+                                  pushToWeb(name, getDeviceBattery(device), true, -55)
                                   return
                               }
                           }
@@ -437,7 +417,7 @@ jobs:
                       if (isTargetDevice(device.name ?: "")) {
                           activeDevice = device
                           val isConn = try { device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false } catch (e: Exception) { false }
-                          if (isConn) pushToWeb(device.name, getDeviceBattery(device), true)
+                          if (isConn) pushToWeb(device.name, getDeviceBattery(device), true, -55)
                           else connectAudioAndControl(device)
                           return
                       }
@@ -463,7 +443,7 @@ jobs:
                           Thread.sleep(1000L)
                           val sock = devSocket(device)
                           rfcommSocket = sock
-                          pushToWeb(device.name ?: "UGREEN Studio Pro", getDeviceBattery(device), true)
+                          pushToWeb(device.name ?: "UGREEN Studio Pro", getDeviceBattery(device), true, -50)
                       } catch (e: Exception) {
                           pushStatusToWeb("Erro ao conectar.", true)
                       }
@@ -520,9 +500,14 @@ jobs:
                   rfcommSocket = null
               }
 
-              private fun pushToWeb(name: String?, battery: Int, connected: Boolean) {
+              private fun pushToWeb(name: String?, battery: Int, connected: Boolean, rssi: Int?) {
                   val safeName = name?.let { "'$it'" } ?: "null"
-                  webView.post { webView.evaluateJavascript("if(window.updateFromAndroid) window.updateFromAndroid($safeName, $battery, $connected);", null) }
+                  val rssiArg = rssi ?: "null"
+                  webView.post { webView.evaluateJavascript("if(window.updateFromAndroid) window.updateFromAndroid($safeName, $battery, $connected, $rssiArg);", null) }
+              }
+
+              private fun pushRssiToWeb(rssi: Int) {
+                  webView.post { webView.evaluateJavascript("if(window.updateRssiSignal) window.updateRssiSignal($rssi);", null) }
               }
 
               private fun pushStatusToWeb(msg: String, resetBtn: Boolean) {
