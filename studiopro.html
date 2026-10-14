@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>UGREEN Studio Pro - S24 FE</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-slide-up {
+      animation: slideUp 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Animação pura e suave apenas a flutuar */
+    @keyframes floatOnly {
+      0%, 100% { transform: translateY(0px); }
+      50%      { transform: translateY(-8px); }
+    }
+    @keyframes shadowPulse {
+      0%, 100% { transform: scale(1); opacity: 0.28; }
+      50%      { transform: scale(0.84); opacity: 0.16; }
+    }
+
+    .headphone-float {
+      animation: floatOnly 3.6s ease-in-out infinite;
+      filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.16));
+    }
+
+    .floor-shadow {
+      width: 115px;
+      height: 14px;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 72%);
+      border-radius: 50%;
+      animation: shadowPulse 3.6s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="bg-neutral-900 text-neutral-900 min-h-screen flex flex-col justify-between items-center select-none font-sans overflow-hidden">
+
+  <!-- BARRA DE TESTE SIMPLIFICADA NO TOPO -->
+  <div class="w-full max-w-md px-3 pt-3 z-50">
+    <div class="bg-neutral-800/95 border border-neutral-700 text-white rounded-2xl p-3 text-xs shadow-lg flex items-center justify-between gap-2">
+      <label class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-semibold cursor-pointer active:scale-95 transition flex items-center gap-1.5 shadow">
+        📸 Trocar Foto
+        <input type="file" id="file-input" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)" />
+      </label>
+
+      <div class="flex items-center gap-1.5">
+        <span class="text-neutral-400">Bat:</span>
+        <input type="range" min="5" max="100" value="100" oninput="updateBattery(this.value)" class="w-20 accent-emerald-400 cursor-pointer" />
+        <span id="sim-battery-text" class="w-8 text-right font-mono">100%</span>
+      </div>
+
+      <button onclick="replayPopup()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold active:scale-95 transition">
+        🔄 Testar
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       ECRÃ 1: CARTÃO POP-UP FLUTUANTE (BOTTOM SHEET)
+  ========================================================= -->
+  <div id="view-popup" class="w-full max-w-md mx-3 mb-4 bg-white rounded-[38px] p-6 shadow-2xl relative animate-slide-up">
+    <button onclick="closePopup()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-500 font-bold">
+      ✕
+    </button>
+
+    <h2 class="text-center text-[22px] font-bold tracking-tight text-neutral-900 mt-1">
+      UGREEN Studio Pro
+    </h2>
+
+    <!-- Palco com Flutuação Suave -->
+    <div id="drop-zone"
+         onclick="document.getElementById('file-input').click()"
+         title="Clique para trocar a foto do UGREEN Studio Pro"
+         class="relative h-56 flex flex-col items-center justify-center my-1 cursor-pointer">
+
+      <!-- Aviso inicial caso ainda não haja foto guardada -->
+      <div id="empty-prompt" class="flex flex-col items-center justify-center border-2 border-dashed border-blue-400 bg-blue-50/60 hover:bg-blue-50 rounded-3xl w-56 h-44 p-4 text-center transition">
+        <span class="text-3xl mb-2">🎧</span>
+        <p class="text-xs font-bold text-blue-600">Clique aqui para carregar a foto do UGREEN Studio Pro</p>
+      </div>
+
+      <!-- Imagem Real a Flutuar -->
+      <div id="card-float-wrapper" class="hidden flex-col items-center justify-center">
+        <img id="img-popup" class="headphone-float h-44 w-auto object-contain select-none pointer-events-none" alt="UGREEN Studio Pro" />
+        <div class="floor-shadow mt-3"></div>
+      </div>
+
+      <!-- Emblema de Bateria ao Ligar -->
+      <div id="popup-battery-badge" class="hidden items-center gap-2 mt-2">
+        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="popup-battery-text" class="text-sm font-semibold text-neutral-700">100%</span>
+      </div>
+    </div>
+
+    <p class="text-[11px] leading-snug text-center text-neutral-400 px-4 mb-5">
+      Pronto para ligar ao seu Galaxy S24 FE com suporte para Cancelamento de Ruído (ANC) e Som Ambiente.
+    </p>
+
+    <button id="btn-main-action" onclick="handleMainAction()" class="w-full py-3.5 rounded-full text-[16px] font-semibold bg-[#007AFF] text-white shadow-md shadow-blue-500/20 active:scale-[0.98] transition">
+      Connect
+    </button>
+  </div>
+
+  <!-- =========================================================
+       ECRÃ 2: PAINEL DE CONTROLO COMPLETO (ESTILO iOS + UGREEN)
+  ========================================================= -->
+  <div id="view-settings" class="hidden w-full max-w-md max-h-[84vh] bg-[#F2F2F7] rounded-t-[38px] overflow-y-auto px-4 pt-5 pb-8 shadow-2xl">
+    <div class="flex items-center justify-between mb-2">
+      <button onclick="showPopupView()" class="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-neutral-800 font-bold text-lg active:scale-95">
+        ‹
+      </button>
+      <h1 class="text-[16px] font-semibold text-neutral-900">UGREEN Studio Pro</h1>
+      <div class="w-9"></div>
+    </div>
+
+    <!-- Miniatura a Flutuar + Anel Verde de Bateria (100%) -->
+    <div class="flex flex-col items-center my-2">
+      <img id="img-header" class="headphone-float h-24 w-auto object-contain mb-1" alt="UGREEN Studio Pro" />
+
+      <div class="relative w-11 h-11 flex items-center justify-center mt-1">
+        <svg class="w-11 h-11 -rotate-90" viewBox="0 0 44 44">
+          <circle cx="22" cy="22" r="18" stroke="#E5E5EA" stroke-width="3.5" fill="none"></circle>
+          <circle id="battery-ring" cx="22" cy="22" r="18" stroke="#34C759" stroke-width="3.5" stroke-dasharray="113.1" stroke-dashoffset="0" stroke-linecap="round" fill="none"></circle>
+        </svg>
+      </div>
+      <span id="settings-battery-text" class="text-[13px] font-semibold text-neutral-800 mt-0.5">100%</span>
+    </div>
+
+    <!-- Nome -->
+    <div class="bg-white rounded-2xl px-4 py-3.5 flex items-center justify-between shadow-sm mb-4">
+      <span class="text-[15px] font-medium text-neutral-900">Name</span>
+      <span class="text-neutral-400 text-[15px]">UGREEN Studio Pro ›</span>
+    </div>
+
+    <!-- Controlo de Ruído (Listening Mode) -->
+    <div class="mb-4">
+      <p class="text-[12px] font-medium text-neutral-500 uppercase tracking-wide px-3 mb-2">Controle de Ruído</p>
+      <div class="bg-[#E3E3E8] p-1 rounded-2xl grid grid-cols-3 gap-1">
+        <button onclick="setListeningMode('anc')" id="mode-anc" class="py-2.5 rounded-xl flex flex-col items-center justify-center bg-white shadow-sm text-neutral-900 transition">
+          <span class="text-base mb-0.5">🟢</span>
+          <span class="text-[11px] font-semibold text-center leading-tight">Cancelamento<br>de Ruído</span>
+        </button>
+        <button onclick="setListeningMode('off')" id="mode-off" class="py-2.5 rounded-xl flex flex-col items-center justify-center text-neutral-600 transition">
+          <span class="text-base mb-0.5">⚪</span>
+          <span class="text-[11px] font-semibold text-center leading-tight">Desativar</span>
+        </button>
+        <button onclick="setListeningMode('transparency')" id="mode-transparency" class="py-2.5 rounded-xl flex flex-col items-center justify-center text-neutral-600 transition">
+          <span class="text-base mb-0.5">👂</span>
+          <span class="text-[11px] font-semibold text-center leading-tight">Som<br>Ambiente</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Opções Oficiais UGREEN -->
+    <div class="bg-white rounded-2xl divide-y divide-neutral-100 shadow-sm mb-4">
+      <div class="px-4 py-3.5 flex items-center justify-between">
+        <span class="text-[14px] font-medium text-neutral-900">Método de cancelamento de ruído</span>
+        <select class="text-[14px] text-neutral-500 bg-transparent outline-none cursor-pointer font-medium">
+          <option>Profundo ›</option>
+          <option>Geral ›</option>
+          <option>Suave ›</option>
+          <option>Adaptativo ›</option>
+        </select>
+      </div>
+      <div class="px-4 py-3.5 flex items-center justify-between">
+        <span class="text-[14px] font-medium text-neutral-900">Modo de cancelamento de ruído do vento</span>
+        <input type="checkbox" class="w-5 h-5 accent-[#34C759] cursor-pointer" />
+      </div>
+    </div>
+
+    <!-- Equalizador e Modo de Jogo -->
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="bg-white rounded-2xl p-3.5 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-[14px] font-semibold text-neutral-900">Equalizador</p>
+          <p class="text-[12px] text-neutral-400">Jazz</p>
+        </div>
+        <span class="text-neutral-400 font-bold">›</span>
+      </div>
+      <div class="bg-white rounded-2xl p-3.5 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-[14px] font-semibold text-neutral-900">Modo de jogo</p>
+          <p id="game-mode-label" class="text-[12px] text-neutral-400">Fechar</p>
+        </div>
+        <input type="checkbox" onchange="document.getElementById('game-mode-label').innerText = this.checked ? 'Ativo' : 'Fechar'" class="w-5 h-5 accent-[#34C759] cursor-pointer" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isConnected = false;
+
+    function handlePhotoUpload(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      processImageFile(file);
+    }
+
+    // Remove o fundo branco ou preto (incluindo vinheta escura) com suavização nas bordas
+    function processImageFile(file) {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 700;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+
+        const cvs = document.createElement('canvas');
+        cvs.width = w;
+        cvs.height = h;
+        const ctx = cvs.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const d = imgData.data;
+
+        const r0 = d[0], g0 = d[1], b0 = d[2], a0 = d[3];
+        if (a0 > 200) {
+          const isWhiteBg = (r0 > 220 && g0 > 220 && b0 > 220);
+          const isBlackBg = (r0 < 35 && g0 < 35 && b0 < 35);
+
+          if (isWhiteBg || isBlackBg) {
+            const visited = new Uint8Array(w * h);
+            const queue = [0, w - 1, (h - 1) * w, (h - 1) * w + w - 1];
+
+            while (queue.length > 0) {
+              const idx = queue.pop();
+              if (visited[idx]) continue;
+              visited[idx] = 1;
+
+              const p = idx * 4;
+              const r = d[p], g = d[p + 1], b = d[p + 2];
+              const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+              const isBg = isWhiteBg ? (lum > 232) : (lum < 28);
+              if (isBg) {
+                d[p + 3] = 0;
+                const x = idx % w, y = (idx / w) | 0;
+                if (x > 0) queue.push(idx - 1);
+                if (x < w - 1) queue.push(idx + 1);
+                if (y > 0) queue.push(idx - w);
+                if (y < h - 1) queue.push(idx + w);
+              } else if (isWhiteBg && lum > 208) {
+                d[p + 3] = Math.round(((232 - lum) / 24) * 255);
+              } else if (isBlackBg && lum < 45) {
+                d[p + 3] = Math.round(((lum - 28) / 17) * 255);
+              }
+            }
+            ctx.putImageData(imgData, 0, 0);
+          }
+        }
+
+        const dataUrl = cvs.toDataURL('image/png');
+        applyCutoutImage(dataUrl);
+        try { localStorage.setItem('ugreen_studio_pro_cutout', dataUrl); } catch (e) {}
+      };
+      img.src = URL.createObjectURL(file);
+    }
+
+    function applyCutoutImage(dataUrl) {
+      document.getElementById('empty-prompt').classList.add('hidden');
+      const wrapper = document.getElementById('card-float-wrapper');
+      wrapper.classList.remove('hidden');
+      wrapper.classList.add('flex');
+
+      document.getElementById('img-popup').src = dataUrl;
+      document.getElementById('img-header').src = dataUrl;
+    }
+
+    function updateBattery(val) {
+      document.getElementById('sim-battery-text').innerText = val + '%';
+      document.getElementById('popup-battery-text').innerText = val + '%';
+      document.getElementById('settings-battery-text').innerText = val + '%';
+      const offset = 113.1 - (val / 100) * 113.1;
+      document.getElementById('battery-ring').style.strokeDashoffset = offset;
+    }
+
+    function handleMainAction() {
+      if (!isConnected) {
+        isConnected = true;
+        document.getElementById('popup-battery-badge').classList.remove('hidden');
+        document.getElementById('popup-battery-badge').classList.add('flex');
+        const btn = document.getElementById('btn-main-action');
+        btn.innerText = 'Abrir Controlos de Ruído';
+        btn.className = 'w-full py-3.5 rounded-full text-[16px] font-semibold bg-neutral-200 text-neutral-900 active:scale-[0.98] transition';
+      } else {
+        document.getElementById('view-popup').classList.add('hidden');
+        document.getElementById('view-settings').classList.remove('hidden');
+      }
+    }
+
+    function showPopupView() {
+      document.getElementById('view-settings').classList.add('hidden');
+      document.getElementById('view-popup').classList.remove('hidden');
+    }
+
+    function closePopup() {
+      document.getElementById('view-popup').classList.add('hidden');
+    }
+
+    function replayPopup() {
+      isConnected = false;
+      document.getElementById('popup-battery-badge').classList.add('hidden');
+      const btn = document.getElementById('btn-main-action');
+      btn.innerText = 'Connect';
+      btn.className = 'w-full py-3.5 rounded-full text-[16px] font-semibold bg-[#007AFF] text-white shadow-md shadow-blue-500/20 active:scale-[0.98] transition';
+      showPopupView();
+    }
+
+    function setListeningMode(mode) {
+      ['anc', 'off', 'transparency'].forEach((m) => {
+        const el = document.getElementById('mode-' + m);
+        el.className = m === mode
+          ? 'py-2.5 rounded-xl flex flex-col items-center justify-center bg-white shadow-sm text-neutral-900 transition'
+          : 'py-2.5 rounded-xl flex flex-col items-center justify-center text-neutral-600 transition';
+      });
+    }
+
+    window.onload = () => {
+      const saved = localStorage.getItem('ugreen_studio_pro_cutout');
+      if (saved) applyCutoutImage(saved);
+    };
+  </script>
+</body>
+</html>
