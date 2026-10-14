@@ -32,7 +32,6 @@ jobs:
 
           cp studiopro.html app/src/main/assets/index.html
 
-          # Liga os botões Off / Transparency / ANC do HTML ao transmissor Bluetooth do Android
           cat << 'EOF' >> app/src/main/assets/index.html
           <script>
             const origClose = window.closePopup;
@@ -214,13 +213,6 @@ jobs:
               private var rfcommSocket: BluetoothSocket? = null
               private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
-              // Pacotes extraídos via engenharia reversa (btsnoop_hci) do UGREEN Studio Pro
-              private val CMD_HANDSHAKE_1 = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x04, 0x01, 0x00, 0x31, 0x91.toByte())
-              private val CMD_HANDSHAKE_2 = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x01, 0x01, 0x00, 0x21, 0x90.toByte())
-              private val CMD_ANC_ON      = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x09, 0x01, 0xA1.toByte(), 0x61, 0xEA.toByte())
-              private val CMD_ANC_OFF     = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x09, 0x01, 0xA0.toByte(), 0xA0.toByte(), 0x2A)
-              private val CMD_TRANSPARENT = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0x09, 0x01, 0xA2.toByte(), 0x21, 0xEB.toByte())
-
               private val btReceiver = object : BroadcastReceiver() {
                   override fun onReceive(context: Context?, intent: Intent?) {
                       when (intent?.action) {
@@ -325,39 +317,50 @@ jobs:
                   } catch (e: Exception) {}
               }
 
+              private fun hexToBytes(hex: String): ByteArray {
+                  val clean = hex.replace(" ", "")
+                  val data = ByteArray(clean.length / 2)
+                  var i = 0
+                  while (i < clean.length) {
+                      data[i / 2] = clean.substring(i, i + 2).toInt(16).toByte()
+                      i += 2
+                  }
+                  return data
+              }
+
               @SuppressLint("MissingPermission")
-              private fun sendUgreenCommand(cmdBytes: ByteArray) {
+              private fun sendUgreenCommand(hexCmd: String) {
                   Thread {
                       try {
-                          val dev = activeDevice ?: run {
+                          if (activeDevice == null) {
                               syncBluetoothState()
-                              activeDevice
-                          } ?: return@Thread
+                          }
+                          val dev = activeDevice ?: return@Thread
 
                           var sock = rfcommSocket
                           if (sock == null || !sock.isConnected) {
-                              sock = try {
+                              val newSock = try {
                                   dev.createInsecureRfcommSocketToServiceRecord(sppUuid).apply { connect() }
                               } catch (e1: Exception) {
                                   try {
                                       dev.createRfcommSocketToServiceRecord(sppUuid).apply { connect() }
                                   } catch (e2: Exception) {
-                                      val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
-                                      (m.invoke(dev, 1) as BluetoothSocket).apply { connect() }
+                                      val m = dev.javaClass.getMethod("createRfcommSocket", Int::class.java)
+                                      (m.invoke(dev, Integer.valueOf(1)) as BluetoothSocket).apply { connect() }
                                   }
                               }
-                              rfcommSocket = sock
-                              // Envia o handshake inicial da UGREEN ao abrir o canal
-                              sock.outputStream.write(CMD_HANDSHAKE_1)
-                              sock.outputStream.flush()
-                              Thread.sleep(60)
-                              sock.outputStream.write(CMD_HANDSHAKE_2)
-                              sock.outputStream.flush()
-                              Thread.sleep(60)
+                              rfcommSocket = newSock
+                              sock = newSock
+                              newSock.outputStream.write(hexToBytes("AA BB CC 04 01 00 31 91"))
+                              newSock.outputStream.flush()
+                              Thread.sleep(60L)
+                              newSock.outputStream.write(hexToBytes("AA BB CC 01 01 00 21 90"))
+                              newSock.outputStream.flush()
+                              Thread.sleep(60L)
                           }
 
-                          sock.outputStream.write(cmdBytes)
-                          sock.outputStream.flush()
+                          sock?.outputStream?.write(hexToBytes(hexCmd))
+                          sock?.outputStream?.flush()
                       } catch (e: Exception) {
                           closeRfcomm()
                       }
@@ -403,9 +406,9 @@ jobs:
                   @JavascriptInterface
                   fun setAncMode(mode: String) {
                       when (mode) {
-                          "anc" -> sendUgreenCommand(CMD_ANC_ON)
-                          "off" -> sendUgreenCommand(CMD_ANC_OFF)
-                          "transparency" -> sendUgreenCommand(CMD_TRANSPARENT)
+                          "anc" -> sendUgreenCommand("AA BB CC 09 01 A1 61 EA")
+                          "off" -> sendUgreenCommand("AA BB CC 09 01 A0 A0 2A")
+                          "transparency" -> sendUgreenCommand("AA BB CC 09 01 A2 21 EB")
                       }
                   }
               }
