@@ -42,6 +42,21 @@
       animation: shadowPulse 3.6s ease-in-out infinite;
     }
 
+    /* Anel de radar ao procurar o fone para parear */
+    @keyframes radarPing {
+      0% { transform: scale(0.85); opacity: 0.75; }
+      100% { transform: scale(1.65); opacity: 0; }
+    }
+    .radar-ring {
+      position: absolute;
+      width: 130px;
+      height: 130px;
+      border-radius: 9999px;
+      border: 2.5px solid rgba(168, 130, 255, 0.65);
+      animation: radarPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+      pointer-events: none;
+    }
+
     /* Estilo Sea Glass (Vidro Fosco Granulado com Borda Brilhante) */
     .sea-glass-bar {
       background: linear-gradient(135deg, rgba(236, 194, 255, 0.58) 0%, rgba(196, 215, 255, 0.58) 100%);
@@ -70,8 +85,6 @@
   <!-- SOMENTE O CARTÃO POP-UP NA PARTE INFERIOR -->
   <div id="view-popup" onclick="event.stopPropagation()" class="w-full max-w-md mx-3 mb-3 bg-white/95 backdrop-blur-xl rounded-[38px] p-6 shadow-2xl border border-white relative animate-slide-up transition-all duration-300">
 
-    <input type="file" id="file-input" accept="image/*" class="hidden" onclick="event.stopPropagation()" onchange="handlePhotoUpload(event)" />
-
     <!-- Botão Fechar (X) -->
     <button onclick="closePopup()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-500 font-bold">
       ✕
@@ -82,24 +95,24 @@
       UGREEN Studio Pro
     </h2>
 
-    <!-- Área Central: Usa a foto embutida no APK ou a guardada na memória permanente -->
-    <label for="file-input" onclick="event.stopPropagation()" class="relative h-52 flex flex-col items-center justify-center my-1 cursor-pointer">
-      <div id="empty-prompt" class="hidden flex-col items-center justify-center border-2 border-dashed border-purple-300 bg-purple-50/50 rounded-3xl w-52 h-40 p-4 text-center">
-        <span class="text-3xl mb-1">🎧</span>
-        <p class="text-xs font-bold text-purple-700">Toque uma vez para fixar a foto do fone</p>
+    <!-- Área Central Fixa (Sem clique de upload de foto) -->
+    <div class="relative h-52 flex flex-col items-center justify-center my-1">
+      <!-- Ondas de radar (só aparecem enquanto procura o fone para parear) -->
+      <div id="search-radar" class="hidden items-center justify-center">
+        <div class="radar-ring"></div>
+        <div class="radar-ring" style="animation-delay: 0.6s"></div>
       </div>
 
-      <div id="card-float-wrapper" class="flex flex-col items-center justify-center">
+      <div id="card-float-wrapper" class="flex flex-col items-center justify-center z-10">
         <img id="img-popup"
              src="ugreen_cutout.png"
-             onerror="handleMissingEmbeddedImage()"
              class="headphone-float h-36 w-auto object-contain select-none pointer-events-none"
-             alt="" />
+             alt="UGREEN Studio Pro" />
         <div class="floor-shadow mt-2"></div>
       </div>
 
       <!-- Anel Circular Verde de Bateria -->
-      <div id="popup-battery-badge" class="hidden items-center gap-2 mt-2">
+      <div id="popup-battery-badge" class="hidden items-center gap-2 mt-2 z-10">
         <div class="relative w-7 h-7 flex items-center justify-center">
           <svg class="w-7 h-7 -rotate-90" viewBox="0 0 44 44">
             <circle cx="22" cy="22" r="18" stroke="#E5E5EA" stroke-width="4.5" fill="none"></circle>
@@ -108,11 +121,11 @@
         </div>
         <span id="popup-battery-text" class="text-[14px] font-bold text-neutral-800">100%</span>
       </div>
-    </label>
+    </div>
 
-    <!-- Subtítulo inicial -->
+    <!-- Texto de estado / instrução -->
     <p id="popup-desc" class="text-[11px] leading-snug text-center text-neutral-400 px-4 mb-5">
-      Áudio Bluetooth de Alta Definição com Cancelamento Ativo de Ruído (ANC).
+      Toque em Connect para procurar e parear o seu UGREEN Studio Pro.
     </p>
 
     <!-- Seletor de Controlo de Ruído no Estilo Sea Glass -->
@@ -134,107 +147,20 @@
     </div>
 
     <!-- Botão Principal -->
-    <button id="btn-main-action" onclick="handleMainAction()" class="w-full py-3.5 rounded-full text-[16px] font-bold sea-glass-btn-main active:scale-[0.98] transition">
-      Connect
+    <button id="btn-main-action" onclick="handleMainAction()" class="w-full py-3.5 rounded-full text-[16px] font-bold sea-glass-btn-main active:scale-[0.98] transition flex items-center justify-center gap-2">
+      <span id="btn-spinner" class="hidden w-4 h-4 border-2 border-indigo-950 border-t-transparent rounded-full animate-spin"></span>
+      <span id="btn-text">Connect</span>
     </button>
   </div>
 
   <script>
     let isConnected = false;
-    let isPickingFile = false;
+    let isSearching = false;
 
     function handleBackdropClick(event) {
-      if (isPickingFile) return;
       if (event.target.id === 'backdrop') {
         closePopup();
       }
-    }
-
-    function handleMissingEmbeddedImage() {
-      const saved = localStorage.getItem('ugreen_studio_pro_cutout') ||
-                    (window.AndroidBridge && window.AndroidBridge.loadPermanentPhoto ? window.AndroidBridge.loadPermanentPhoto() : '');
-      if (saved && saved.startsWith('data:image')) {
-        document.getElementById('img-popup').src = saved;
-      } else {
-        document.getElementById('card-float-wrapper').classList.add('hidden');
-        document.getElementById('empty-prompt').classList.remove('hidden');
-        document.getElementById('empty-prompt').classList.add('flex');
-      }
-    }
-
-    function handlePhotoUpload(event) {
-      isPickingFile = true;
-      const file = event.target.files?.[0];
-      if (!file) {
-        isPickingFile = false;
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 500;
-          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-          const w = Math.round(img.width * scale);
-          const h = Math.round(img.height * scale);
-
-          const cvs = document.createElement('canvas');
-          cvs.width = w;
-          cvs.height = h;
-          const ctx = cvs.getContext('2d');
-          ctx.drawImage(img, 0, 0, w, h);
-
-          const imgData = ctx.getImageData(0, 0, w, h);
-          const d = imgData.data;
-          const r0 = d[0], g0 = d[1], b0 = d[2], a0 = d[3];
-          if (a0 > 200) {
-            const isWhiteBg = (r0 > 220 && g0 > 220 && b0 > 220);
-            const isBlackBg = (r0 < 35 && g0 < 35 && b0 < 35);
-            if (isWhiteBg || isBlackBg) {
-              const visited = new Uint8Array(w * h);
-              const queue = [0, w - 1, (h - 1) * w, (h - 1) * w + w - 1];
-              while (queue.length > 0) {
-                const idx = queue.pop();
-                if (visited[idx]) continue;
-                visited[idx] = 1;
-                const p = idx * 4;
-                const lum = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
-                const isBg = isWhiteBg ? (lum > 232) : (lum < 28);
-                if (isBg) {
-                  d[p + 3] = 0;
-                  const x = idx % w, y = (idx / w) | 0;
-                  if (x > 0) queue.push(idx - 1);
-                  if (x < w - 1) queue.push(idx + 1);
-                  if (y > 0) queue.push(idx - w);
-                  if (y < h - 1) queue.push(idx + w);
-                } else if (isWhiteBg && lum > 208) {
-                  d[p + 3] = Math.round(((232 - lum) / 24) * 255);
-                } else if (isBlackBg && lum < 45) {
-                  d[p + 3] = Math.round(((lum - 28) / 17) * 255);
-                }
-              }
-              ctx.putImageData(imgData, 0, 0);
-            }
-          }
-          const dataUrl = cvs.toDataURL('image/png');
-          applyCutoutImage(dataUrl);
-          try { localStorage.setItem('ugreen_studio_pro_cutout', dataUrl); } catch (err) {}
-          if (window.AndroidBridge && window.AndroidBridge.savePermanentPhoto) {
-            window.AndroidBridge.savePermanentPhoto(dataUrl);
-          }
-          setTimeout(() => { isPickingFile = false; }, 300);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-
-    function applyCutoutImage(dataUrl) {
-      document.getElementById('empty-prompt').classList.add('hidden');
-      const wrapper = document.getElementById('card-float-wrapper');
-      wrapper.classList.remove('hidden');
-      wrapper.classList.add('flex');
-      document.getElementById('img-popup').src = dataUrl;
     }
 
     function updateBattery(val) {
@@ -254,19 +180,60 @@
     }
 
     function handleMainAction() {
-      if (!isConnected) {
-        isConnected = true;
-        document.getElementById('popup-battery-badge').classList.remove('hidden');
-        document.getElementById('popup-battery-badge').classList.add('flex');
-        document.getElementById('popup-desc').classList.add('hidden');
-        document.getElementById('anc-controls').classList.remove('hidden');
-
-        const btn = document.getElementById('btn-main-action');
-        btn.innerText = 'Concluído';
-      } else {
+      if (isConnected) {
         closePopup();
+        return;
+      }
+      if (isSearching) return;
+
+      // Entra no modo "Procurando fone para parear / conectar"
+      isSearching = true;
+      document.getElementById('search-radar').classList.remove('hidden');
+      document.getElementById('search-radar').classList.add('flex');
+      document.getElementById('btn-spinner').classList.remove('hidden');
+      document.getElementById('btn-text').innerText = 'Procurando fone...';
+      document.getElementById('popup-desc').innerText = 'A procurar o UGREEN Studio Pro no Bluetooth para parear...';
+
+      if (window.AndroidBridge && window.AndroidBridge.startPairingOrConnect) {
+        window.AndroidBridge.startPairingOrConnect();
       }
     }
+
+    // Chamado pelo Android para atualizar o texto enquanto procura ou pareia
+    window.updateSearchStatus = function(statusMessage, resetButton) {
+      document.getElementById('popup-desc').innerText = statusMessage;
+      if (resetButton) {
+        isSearching = false;
+        document.getElementById('search-radar').classList.add('hidden');
+        document.getElementById('search-radar').classList.remove('flex');
+        document.getElementById('btn-spinner').classList.add('hidden');
+        document.getElementById('btn-text').innerText = 'Connect';
+      }
+    };
+
+    // Chamado pelo Android assim que o fone pareia e conecta
+    window.onDeviceConnected = function(deviceName, batteryLevel) {
+      isSearching = false;
+      isConnected = true;
+
+      if (deviceName) {
+        document.getElementById('device-title').innerText = deviceName;
+      }
+      if (batteryLevel >= 0 && batteryLevel <= 100) {
+        updateBattery(batteryLevel);
+      }
+
+      document.getElementById('search-radar').classList.add('hidden');
+      document.getElementById('search-radar').classList.remove('flex');
+      document.getElementById('btn-spinner').classList.add('hidden');
+
+      document.getElementById('popup-battery-badge').classList.remove('hidden');
+      document.getElementById('popup-battery-badge').classList.add('flex');
+      document.getElementById('popup-desc').classList.add('hidden');
+      document.getElementById('anc-controls').classList.remove('hidden');
+
+      document.getElementById('btn-text').innerText = 'Concluído';
+    };
 
     function closePopup() {
       document.getElementById('view-popup').classList.add('hidden');
@@ -274,21 +241,10 @@
     }
 
     window.updateFromAndroid = function(deviceName, batteryLevel, connected) {
-      if (deviceName) {
-        document.getElementById('device-title').innerText = deviceName;
-      }
-      if (batteryLevel >= 0 && batteryLevel <= 100) {
-        updateBattery(batteryLevel);
-      }
-      if (connected && !isConnected) {
-        handleMainAction();
-      }
-    };
-
-    window.onload = () => {
-      const saved = localStorage.getItem('ugreen_studio_pro_cutout');
-      if (saved && saved.startsWith('data:image')) {
-        applyCutoutImage(saved);
+      if (connected) {
+        window.onDeviceConnected(deviceName, batteryLevel);
+      } else {
+        if (deviceName) document.getElementById('device-title').innerText = deviceName;
       }
     };
   </script>
