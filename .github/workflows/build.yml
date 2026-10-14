@@ -24,10 +24,146 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Criar Ícone Sea Glass e Recortar Foto do Fone
+        run: |
+          pip install pillow pillow-avif-plugin
+          mkdir -p app/src/main/assets
+          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/res/mipmap-mdpi
+          mkdir -p app/src/main/res/mipmap-hdpi
+          mkdir -p app/src/main/res/mipmap-xhdpi
+          mkdir -p app/src/main/res/mipmap-xxhdpi
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+
+          python3 - << 'PYEOF'
+          import os, glob, random, math
+          from PIL import Image, ImageDraw, ImageFilter
+          try:
+              import pillow_avif
+          except Exception:
+              pass
+
+          # 1. CRIA O ÍCONE "SEA GLASS" FIEL AO VÍDEO DE REFERÊNCIA
+          size = 512
+          # Base areia/creme suave do tema Sea Glass para Adaptive Icon da Samsung
+          canvas = Image.new("RGBA", (size, size), (246, 238, 228, 255))
+
+          # Sombra difusa colorida (lilás/rosa translúcido projetado à direita/baixo)
+          shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+          sdraw = ImageDraw.Draw(shadow)
+          sdraw.rounded_rectangle([78, 96, 452, 464], radius=118, fill=(182, 118, 232, 135))
+          shadow = shadow.filter(ImageFilter.GaussianBlur(24))
+          canvas.alpha_composite(shadow)
+
+          # Peça de vidro marinho fosco (gradiente Rosa-Lilás -> Azul-Celeste -> Verde-Água)
+          glass = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+          gpx = glass.load()
+          random.seed(42)
+          for y in range(52, 436):
+              u = (y - 52) / 384.0
+              for x in range(52, 436):
+                  t = (x - 52) / 384.0
+                  # Mistura suave das cores Sea Glass do vídeo
+                  r = int(242 * (1 - t * 0.45) + 180 * (t * 0.45))
+                  g = int(188 * (1 - u * 0.5) + 228 * (u * 0.5))
+                  b = int(252)
+                  # Luz interna mais clara no canto superior esquerdo
+                  highlight = max(0.0, 1.0 - math.hypot(t - 0.22, u - 0.22) * 1.35)
+                  r = min(255, int(r + highlight * 28))
+                  g = min(255, int(g + highlight * 28))
+                  b = min(255, int(b + highlight * 15))
+                  # Textura granulada característica do Sea Glass (Frosted Sea Glass Grain)
+                  grain = random.randint(-9, 9)
+                  r = max(0, min(255, r + grain))
+                  g = max(0, min(255, g + grain))
+                  b = max(0, min(255, b + grain))
+                  gpx[x, y] = (r, g, b, 248)
+
+          mask = Image.new("L", (size, size), 0)
+          mdraw = ImageDraw.Draw(mask)
+          mdraw.rounded_rectangle([52, 52, 436, 436], radius=116, fill=255)
+
+          frosted_piece = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+          frosted_piece.paste(glass, (0, 0), mask)
+
+          # Borda interna branca brilhante de refração de vidro
+          bdraw = ImageDraw.Draw(frosted_piece)
+          bdraw.rounded_rectangle([54, 54, 434, 434], radius=114, outline=(255, 255, 255, 235), width=8)
+          bdraw.rounded_rectangle([59, 59, 429, 429], radius=110, outline=(255, 255, 255, 110), width=3)
+
+          # Glifo minimalista do Auscultador no mesmo tom Roxo/Índigo profundo do vídeo Sea Glass
+          ink = (74, 29, 118, 245)
+          # Arco superior
+          bdraw.arc([148, 134, 340, 326], start=180, end=360, fill=ink, width=24)
+          # Almofadas esquerda e direita em formato cápsula
+          bdraw.rounded_rectangle([134, 224, 188, 340], radius=27, fill=ink)
+          bdraw.rounded_rectangle([300, 224, 354, 340], radius=27, fill=ink)
+          # Brilho interno nas conchas
+          bdraw.rounded_rectangle([150, 248, 164, 316], radius=7, fill=(248, 232, 255, 215))
+          bdraw.rounded_rectangle([324, 248, 338, 316], radius=7, fill=(248, 232, 255, 215))
+
+          canvas.alpha_composite(frosted_piece)
+
+          # Guarda em todas as resoluções do Android / Samsung One UI
+          canvas.save("app/src/main/res/drawable/ic_launcher.png")
+          for folder, px_size in [
+              ("mipmap-mdpi", 48),
+              ("mipmap-hdpi", 72),
+              ("mipmap-xhdpi", 96),
+              ("mipmap-xxhdpi", 144),
+              ("mipmap-xxxhdpi", 192),
+          ]:
+              resized = canvas.resize((px_size, px_size), Image.Resampling.LANCZOS)
+              resized.save(f"app/src/main/res/{folder}/ic_launcher.png")
+              resized.save(f"app/src/main/res/{folder}/ic_launcher_round.png")
+
+          # 2. RECORTE AUTOMÁTICO DA FOTO DO FONE ENVIADA PARA O REPOSITÓRIO
+          candidates = []
+          for ext in ("*.png", "*.jpg", "*.jpeg", "*.webp", "*.avif"):
+              candidates.extend(glob.glob(ext))
+          candidates = [c for c in candidates if "ic_launcher" not in c]
+          ugreen_imgs = [c for c in candidates if "ugreen" in c.lower() or "1466" in c.lower() or "fone" in c.lower()]
+          chosen = ugreen_imgs[0] if ugreen_imgs else (candidates[0] if candidates else None)
+
+          if chosen:
+              try:
+                  im = Image.open(chosen).convert("RGBA")
+                  im.thumbnail((600, 600), Image.Resampling.LANCZOS)
+                  w, h = im.size
+                  px = im.load()
+                  r0, g0, b0, a0 = px[0, 0]
+                  if a0 > 200:
+                      is_white = (r0 > 215 and g0 > 215 and b0 > 215)
+                      is_black = (r0 < 40 and g0 < 40 and b0 < 40)
+                      if is_white or is_black:
+                          visited = set()
+                          stack = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+                          while stack:
+                              x, y = stack.pop()
+                              if (x, y) in visited:
+                                  continue
+                              visited.add((x, y))
+                              r, g, b, a = px[x, y]
+                              lum = 0.299 * r + 0.587 * g + 0.114 * b
+                              bg = (lum > 230) if is_white else (lum < 28)
+                              if bg:
+                                  px[x, y] = (r, g, b, 0)
+                                  if x > 0: stack.append((x - 1, y))
+                                  if x < w - 1: stack.append((x + 1, y))
+                                  if y > 0: stack.append((x, y - 1))
+                                  if y < h - 1: stack.append((x, y + 1))
+                              elif is_white and lum > 205:
+                                  px[x, y] = (r, g, b, int(((230 - lum) / 25.0) * 255))
+                              elif is_black and lum < 45:
+                                  px[x, y] = (r, g, b, int(((lum - 28) / 17.0) * 255))
+                  im.save("app/src/main/assets/ugreen_cutout.png")
+              except Exception as e:
+                  print("Erro ao processar imagem:", e)
+          PYEOF
+
       - name: Montar estrutura nativa Android com Controlo ANC Real
         run: |
           mkdir -p app/src/main/java/com/anderson/studiopro
-          mkdir -p app/src/main/assets
           mkdir -p app/src/main/res/values
 
           cp studiopro.html app/src/main/assets/index.html
@@ -45,26 +181,6 @@ jobs:
               if (origSetMode) origSetMode(mode);
               if (window.AndroidBridge && window.AndroidBridge.setAncMode) {
                 window.AndroidBridge.setAncMode(mode);
-              }
-            };
-
-            window.updateFromAndroid = function(deviceName, batteryLevel, connected) {
-              if (deviceName) {
-                if (typeof switchDeviceProfile === 'function') {
-                  if (deviceName.toUpperCase().includes('QCY')) {
-                    switchDeviceProfile('qcy');
-                  } else {
-                    switchDeviceProfile('ugreen');
-                  }
-                }
-                const titleEl = document.getElementById('device-title');
-                if (titleEl) titleEl.innerText = deviceName;
-              }
-              if (batteryLevel >= 0 && batteryLevel <= 100) {
-                updateBattery(batteryLevel);
-              }
-              if (connected && !isConnected) {
-                handleMainAction();
               }
             };
           </script>
@@ -115,8 +231,8 @@ jobs:
                   applicationId = "com.anderson.studiopro"
                   minSdk = 29
                   targetSdk = 34
-                  versionCode = 2
-                  versionName = "2.0-ANC"
+                  versionCode = 4
+                  versionName = "4.0-SeaGlass"
               }
 
               compileOptions {
@@ -152,11 +268,15 @@ jobs:
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
               <application
-                  android:label="Studio Pro Popup"
+                  android:label="Studio Pro"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
                   android:usesCleartextTraffic="true">
 
                   <activity
                       android:name=".MainActivity"
+                      android:icon="@mipmap/ic_launcher"
+                      android:roundIcon="@mipmap/ic_launcher_round"
                       android:theme="@style/Theme.OverlayPopup"
                       android:launchMode="singleInstance"
                       android:excludeFromRecents="true"
@@ -204,6 +324,7 @@ jobs:
           import android.webkit.WebView
           import android.webkit.WebViewClient
           import android.widget.Toast
+          import java.io.File
           import java.util.UUID
 
           class MainActivity : Activity() {
@@ -298,7 +419,7 @@ jobs:
                       val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
                       for (device in adapter.bondedDevices) {
                           val name = device.name ?: continue
-                          if (name.contains("Studio Pro", true) || name.contains("UGREEN", true) || name.contains("QCY", true)) {
+                          if (name.contains("Studio Pro", true) || name.contains("UGREEN", true)) {
                               val isConn = try {
                                   device.javaClass.getMethod("isConnected").invoke(device) as? Boolean ?: false
                               } catch (e: Exception) { false }
@@ -411,6 +532,21 @@ jobs:
                           "transparency" -> sendUgreenCommand("AA BB CC 09 01 A2 21 EB")
                       }
                   }
+
+                  @JavascriptInterface
+                  fun savePermanentPhoto(dataUrl: String) {
+                      try {
+                          File(filesDir, "ugreen_cutout.txt").writeText(dataUrl)
+                      } catch (e: Exception) {}
+                  }
+
+                  @JavascriptInterface
+                  fun loadPermanentPhoto(): String {
+                      return try {
+                          val f = File(filesDir, "ugreen_cutout.txt")
+                          if (f.exists()) f.readText() else ""
+                      } catch (e: Exception) { "" }
+                  }
               }
           }
           EOF
@@ -432,8 +568,7 @@ jobs:
                   val name = device?.name ?: return
 
                   if (name.contains("Studio Pro", ignoreCase = true) ||
-                      name.contains("UGREEN", ignoreCase = true) ||
-                      name.contains("QCY", ignoreCase = true)) {
+                      name.contains("UGREEN", ignoreCase = true)) {
                       val popupIntent = Intent(context, MainActivity::class.java).apply {
                           addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                       }
